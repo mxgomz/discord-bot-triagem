@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ui import Button, View
+from discord.ui import Button, View, Modal, TextInput
 import os
 
 intents = discord.Intents.default()
@@ -13,61 +13,58 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 ID_CANAL_TRIAGEM = 1361050940383428838
 ID_CARGO_MEMBRO = 1360956462180077669
 
-class TriagemView(View):
+class TriagemModal(Modal):
     def __init__(self):
-        super().__init__(timeout=None)  # sem timeout para o botão ficar fixo
+        super().__init__(title="Formulário de Triagem")
+        self.nome = TextInput(label="Nome", placeholder="Digite seu nome", max_length=100)
+        self.passaporte = TextInput(label="Passaporte (somente números)", placeholder="Ex: 123456", max_length=20)
 
-    @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
-    async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            f"{interaction.user.mention}, por favor, digite seu **nome completo**.", ephemeral=True
-        )
+        self.add_item(self.nome)
+        self.add_item(self.passaporte)
 
-        def check_nome(m):
-            return m.author == interaction.user and m.channel.id == ID_CANAL_TRIAGEM
-
-        try:
-            nome_msg = await bot.wait_for("message", check=check_nome, timeout=60)
-        except:
-            await interaction.followup.send("Tempo esgotado para enviar o nome.", ephemeral=True)
-            return
-
-        await interaction.followup.send(
-            f"{interaction.user.mention}, agora digite seu **passaporte (apenas números)**.", ephemeral=True
-        )
-
-        def check_passaporte(m):
-            return m.author == interaction.user and m.channel.id == ID_CANAL_TRIAGEM
-
-        try:
-            passaporte_msg = await bot.wait_for("message", check=check_passaporte, timeout=60)
-        except:
-            await interaction.followup.send("Tempo esgotado para enviar o passaporte.", ephemeral=True)
-            return
-
-        nome = nome_msg.content.strip()
-        passaporte = passaporte_msg.content.strip()
+    async def on_submit(self, interaction: discord.Interaction):
+        nome = self.nome.value.strip()
+        passaporte = self.passaporte.value.strip()
 
         if not passaporte.isdigit():
-            await interaction.followup.send("Passaporte inválido. Deve conter apenas números.", ephemeral=True)
+            await interaction.response.send_message("Passaporte inválido, deve conter somente números.", ephemeral=True)
             return
 
         apelido = f"{nome} #{passaporte}"
-
         member = interaction.guild.get_member(interaction.user.id)
+
+        # Verifica se já tem o cargo de membro ou superior
+        if member and any(role.id == ID_CARGO_MEMBRO or role.position > interaction.guild.get_role(ID_CARGO_MEMBRO).position for role in member.roles):
+            await interaction.response.send_message("Você já está cadastrado como membro ou possui cargo superior.", ephemeral=True)
+            return
+
         try:
             await member.edit(nick=apelido)
             cargo = interaction.guild.get_role(ID_CARGO_MEMBRO)
             if cargo:
                 await member.add_roles(cargo)
-                await interaction.followup.send(f"{interaction.user.mention}, você foi promovido a **Membro**!\nApelido definido como `{apelido}` ✅", ephemeral=True)
+                await interaction.response.send_message(f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅", ephemeral=True)
             else:
-                await interaction.followup.send("Cargo de membro não encontrado.", ephemeral=True)
+                await interaction.response.send_message("Cargo de membro não encontrado.", ephemeral=True)
         except discord.Forbidden:
-            await interaction.followup.send("Não tenho permissão para alterar apelido ou cargo.", ephemeral=True)
+            await interaction.response.send_message("Não tenho permissão para alterar apelido ou cargo.", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"Erro ao processar: {e}", ephemeral=True)
+            await interaction.response.send_message(f"Erro ao processar: {e}", ephemeral=True)
 
+class TriagemView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
+    async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        member = interaction.guild.get_member(interaction.user.id)
+        cargo_membro = interaction.guild.get_role(ID_CARGO_MEMBRO)
+        if member and cargo_membro in member.roles:
+            await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
+            return
+
+        modal = TriagemModal()
+        await interaction.response.send_modal(modal)
 
 @bot.event
 async def on_ready():
@@ -75,7 +72,6 @@ async def on_ready():
 
     canal = bot.get_channel(ID_CANAL_TRIAGEM)
     if canal:
-        # Envia a mensagem com o botão apenas uma vez (ou quando bot iniciar)
         mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
