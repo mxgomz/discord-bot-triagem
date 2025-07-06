@@ -1,8 +1,8 @@
-import botriagem
+import discord
 import os
 from discord.ext import commands
 
-intents = botriagem.Intents.default()
+intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
@@ -22,11 +22,9 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Verifica se a mensagem foi no canal de triagem
     if message.channel.id != ID_CANAL_TRIAGEM:
         return
 
-    # Filtra últimas mensagens do usuário no canal
     history = [msg async for msg in message.channel.history(limit=20)]
     user_msgs = [msg for msg in reversed(history) if msg.author == message.author]
 
@@ -43,10 +41,7 @@ async def on_message(message):
     apelido = f"{nome} #{passaporte}"
 
     try:
-        # Muda o apelido
         await message.author.edit(nick=apelido)
-
-        # Atribui o cargo
         cargo = message.guild.get_role(ID_CARGO_MEMBRO)
         if cargo:
             await message.author.add_roles(cargo)
@@ -55,7 +50,7 @@ async def on_message(message):
             )
         else:
             await message.channel.send(f"{message.author.mention}, cargo de membro **não encontrado**.")
-    except botriagem.Forbidden:
+    except discord.Forbidden:
         await message.channel.send(f"{message.author.mention}, não tenho permissão para mudar seu apelido ou cargo.")
     except Exception as e:
         await message.channel.send(f"⚠️ Erro ao processar: `{e}`")
