@@ -10,7 +10,7 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-ID_CANAL_TRIAGEM = 1361050940383428838
+ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 
 class TriagemModal(Modal):
