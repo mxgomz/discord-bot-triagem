@@ -1,7 +1,7 @@
-import discord
+import botriagem
 from discord.ext import commands
 
-intents = discord.Intents.default()
+intents = botriagem.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
@@ -54,7 +54,7 @@ async def on_message(message):
             )
         else:
             await message.channel.send(f"{message.author.mention}, cargo de membro **não encontrado**.")
-    except discord.Forbidden:
+    except botriagem.Forbidden:
         await message.channel.send(f"{message.author.mention}, não tenho permissão para mudar seu apelido ou cargo.")
     except Exception as e:
         await message.channel.send(f"⚠️ Erro ao processar: `{e}`")
