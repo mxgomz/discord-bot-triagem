@@ -1,4 +1,5 @@
 import botriagem
+import os
 from discord.ext import commands
 
 intents = botriagem.Intents.default()
@@ -60,3 +61,5 @@ async def on_message(message):
         await message.channel.send(f"⚠️ Erro ao processar: `{e}`")
 
     await bot.process_commands(message)
+
+bot.run(os.getenv("DISCORD_TOKEN"))
