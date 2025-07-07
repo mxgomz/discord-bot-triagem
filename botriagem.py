@@ -4,7 +4,6 @@ from discord.ui import Button, View, Modal, TextInput
 import os
 import datetime
 import asyncio
-import re
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -48,7 +47,6 @@ class TriagemModal(Modal):
             if cargo:
                 await member.add_roles(cargo)
 
-                # Botão para abrir ticket
                 url = f"https://discord.com/channels/{interaction.guild.id}/{ID_CANAL_TICKET}"
                 view = View()
                 view.add_item(Button(label="🎫 Abrir Ticket", style=discord.ButtonStyle.blurple, url=url))
@@ -59,7 +57,6 @@ class TriagemModal(Modal):
                     view=view
                 )
 
-                # Log no canal de logs
                 canal_logs = interaction.guild.get_channel(ID_CANAL_LOGS)
                 if canal_logs:
                     await canal_logs.send(f"✅ `{apelido}` acabou de passar pela triagem.")
@@ -98,23 +95,17 @@ async def on_ready():
 @bot.event
 async def on_guild_channel_create(channel):
     if isinstance(channel, discord.TextChannel) and channel.name.startswith("ticket-"):
-        await asyncio.sleep(2)  # Espera o Ticket Tool terminar de criar o canal
+        await asyncio.sleep(2)  # Espera o Ticket Tool configurar o canal
 
         try:
-            # Pega até 5 mensagens para identificar o autor
             messages = [msg async for msg in channel.history(limit=5)]
             for msg in messages:
                 apelido = msg.author.nick or msg.author.name
                 if apelido:
-                    # Formata para nome de canal
-                    nome_formatado = re.sub(r'[^a-zA-Z0-9]', '-', apelido.lower())
-                    nome_formatado = nome_formatado.strip('-')[:100]  # Limite Discord
-                    await channel.edit(name=nome_formatado)
-
                     agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
                     await channel.send(f"📬 Ticket de **{apelido}** aberto em {agora}.")
                     break
         except Exception as e:
-            print(f"Erro ao renomear canal de ticket: {e}")
+            print(f"Erro ao enviar mensagem de abertura de ticket: {e}")
 
 bot.run(os.getenv("DISCORD_TOKEN"))
