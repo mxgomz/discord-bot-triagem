@@ -12,6 +12,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
+ID_CANAL_LOGS = 1391853666507690034  # Canal para log de triagem
 
 class TriagemModal(Modal):
     def __init__(self):
@@ -33,7 +34,6 @@ class TriagemModal(Modal):
         apelido = f"{nome} #{passaporte}"
         member = interaction.guild.get_member(interaction.user.id)
 
-        # Verifica se já tem o cargo de membro ou superior
         if member and any(role.id == ID_CARGO_MEMBRO or role.position > interaction.guild.get_role(ID_CARGO_MEMBRO).position for role in member.roles):
             await interaction.response.send_message("Você já está cadastrado como membro ou possui cargo superior.", ephemeral=True)
             return
@@ -44,6 +44,11 @@ class TriagemModal(Modal):
             if cargo:
                 await member.add_roles(cargo)
                 await interaction.response.send_message(f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅", ephemeral=True)
+
+                # Envia log no canal de logs
+                canal_logs = interaction.guild.get_channel(ID_CANAL_LOGS)
+                if canal_logs:
+                    await canal_logs.send(f"✅ `{apelido}` acabou de passar pela triagem.")
             else:
                 await interaction.response.send_message("Cargo de membro não encontrado.", ephemeral=True)
         except discord.Forbidden:
