@@ -2,6 +2,9 @@ import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput
 import os
+import datetime
+import asyncio
+import re
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -12,7 +15,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
-ID_CANAL_LOGS = 1391853666507690034  # Canal para log de triagem
+ID_CANAL_LOGS = 1391853666507690034
+ID_CANAL_TICKET = 1361677898980790314
 
 class TriagemModal(Modal):
     def __init__(self):
@@ -43,9 +47,19 @@ class TriagemModal(Modal):
             cargo = interaction.guild.get_role(ID_CARGO_MEMBRO)
             if cargo:
                 await member.add_roles(cargo)
-                await interaction.response.send_message(f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅", ephemeral=True)
 
-                # Envia log no canal de logs
+                # Botão para abrir ticket
+                url = f"https://discord.com/channels/{interaction.guild.id}/{ID_CANAL_TICKET}"
+                view = View()
+                view.add_item(Button(label="🎫 Abrir Ticket", style=discord.ButtonStyle.blurple, url=url))
+
+                await interaction.response.send_message(
+                    f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅\n\nClique abaixo para abrir um **ticket** e continuar o processo.",
+                    ephemeral=True,
+                    view=view
+                )
+
+                # Log no canal de logs
                 canal_logs = interaction.guild.get_channel(ID_CANAL_LOGS)
                 if canal_logs:
                     await canal_logs.send(f"✅ `{apelido}` acabou de passar pela triagem.")
@@ -80,5 +94,27 @@ async def on_ready():
         mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
+
+@bot.event
+async def on_guild_channel_create(channel):
+    if isinstance(channel, discord.TextChannel) and channel.name.startswith("ticket-"):
+        await asyncio.sleep(2)  # Espera o Ticket Tool terminar de criar o canal
+
+        try:
+            # Pega até 5 mensagens para identificar o autor
+            messages = [msg async for msg in channel.history(limit=5)]
+            for msg in messages:
+                apelido = msg.author.nick or msg.author.name
+                if apelido:
+                    # Formata para nome de canal
+                    nome_formatado = re.sub(r'[^a-zA-Z0-9]', '-', apelido.lower())
+                    nome_formatado = nome_formatado.strip('-')[:100]  # Limite Discord
+                    await channel.edit(name=nome_formatado)
+
+                    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+                    await channel.send(f"📬 Ticket de **{apelido}** aberto em {agora}.")
+                    break
+        except Exception as e:
+            print(f"Erro ao renomear canal de ticket: {e}")
 
 bot.run(os.getenv("DISCORD_TOKEN"))
