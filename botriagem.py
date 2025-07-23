@@ -118,11 +118,17 @@ async def on_message(message):
     if message.channel.id == ID_CANAL_FAMILIA:
         conteudo = message.content.lower()
 
-        if "ajuda" in conteudo or "busca" in conteudo:
+        palavras_chave = [
+            "ajuda", "busca", "loc", "salva", "morto",
+            "to na", "to em", "help", "ajudar", "onde"
+        ]
+
+        if any(palavra in conteudo for palavra in palavras_chave):
             await message.channel.send(
                 "⚠️ **Aviso:** O uso de metagaming no chat da família é proibido. Persistindo, poderão ocorrer punições."
             )
 
     await bot.process_commands(message)
+
 
 bot.run(os.getenv("DISCORD_TOKEN"))
