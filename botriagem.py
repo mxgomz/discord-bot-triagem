@@ -16,6 +16,7 @@ ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
 ID_CANAL_TICKET = 1361677898980790314
+ID_CANAL_FAMILIA = 1361045908577456138  # Canal onde o aviso será enviado
 
 class TriagemModal(Modal):
     def __init__(self):
@@ -107,5 +108,21 @@ async def on_guild_channel_create(channel):
                     break
         except Exception as e:
             print(f"Erro ao enviar mensagem de abertura de ticket: {e}")
+
+# ✅ NOVO EVENTO: Detecção de "ajuda" ou "busca" no canal da família
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.channel.id == ID_CANAL_FAMILIA:
+        conteudo = message.content.lower()
+
+        if "ajuda" in conteudo or "busca" in conteudo:
+            await message.channel.send(
+                "⚠️ **Aviso:** O uso de metagaming no chat da família é proibido. Persistindo, poderão ocorrer punições."
+            )
+
+    await bot.process_commands(message)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
