@@ -167,7 +167,4 @@ async def on_ready():
     await atualizar_mensagem_estoque()
     print(f"Bot conectado como {bot.user}")
 
-TOKEN = os.getenv("DISCORD_TOKEN") or "SEU_TOKEN_AQUI"
-bot.run(TOKEN)
-
 bot.run(os.getenv("DISCORD_TOKEN"))
