@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
-from discord.ui import Button, View, Modal, TextInput, Select, SelectOption
+from discord.ui import Button, View, Modal, TextInput, Select
+from discord import SelectOption
 import os
 import datetime
 import asyncio
