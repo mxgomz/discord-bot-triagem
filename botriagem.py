@@ -2,8 +2,9 @@ import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput, Select, SelectOption
 import os
-import sqlite3
+import datetime
 import asyncio
+import sqlite3
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -77,9 +78,10 @@ async def atualizar_mensagem_estoque():
     except Exception as e:
         print(f"Erro ao atualizar mensagem de estoque: {e}")
 
+# Modal que agora só pede qtd e obs, pois o tipo será passado via select
 class EstoqueModal(Modal):
     def __init__(self, acao, tipo):
-        super().__init__(title=f"{acao} Munição - {tipo}")
+        super().__init__(title=f"{acao} Munição - {tipo.upper()}")
         self.acao = acao
         self.tipo = tipo
         self.qtd = TextInput(label="Quantidade", placeholder="Somente números")
@@ -88,23 +90,22 @@ class EstoqueModal(Modal):
         self.add_item(self.obs)
 
     async def on_submit(self, interaction: discord.Interaction):
-        tipo = self.tipo
         if not self.qtd.value.isdigit():
             await interaction.response.send_message("Quantidade inválida.", ephemeral=True)
             return
 
         quantidade = int(self.qtd.value)
-        estoque_atual = obter_estoque().get(tipo, 0)
+        estoque_atual = obter_estoque().get(self.tipo, 0)
 
         if self.acao == "Retirar":
             quantidade = -quantidade
-            atualizar_estoque(tipo, quantidade)
+            atualizar_estoque(self.tipo, quantidade)
             sinal = "➖"
         elif self.acao == "Adicionar":
-            atualizar_estoque(tipo, quantidade)
+            atualizar_estoque(self.tipo, quantidade)
             sinal = "➕"
         elif self.acao == "Editar":
-            definir_estoque(tipo, quantidade)
+            definir_estoque(self.tipo, quantidade)
             sinal = "✏️"
 
         await atualizar_mensagem_estoque()
@@ -112,12 +113,13 @@ class EstoqueModal(Modal):
         canal_log = bot.get_channel(ID_CANAL_LOG_MUNICAO)
         if canal_log:
             if self.acao == "Editar":
-                await canal_log.send(f"✏️ `{interaction.user.display_name}` alterou **{tipo.upper()}** de {estoque_atual} para {quantidade}\n📝 {self.obs.value or 'Sem observações.'}")
+                await canal_log.send(f"✏️ {interaction.user.display_name} alterou **{self.tipo.upper()}** de {estoque_atual} para {quantidade}\n📝 {self.obs.value or 'Sem observações.'}")
             else:
-                await canal_log.send(f"{sinal} `{interaction.user.display_name}` {self.acao.lower()} {abs(quantidade)} de **{tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
+                await canal_log.send(f"{sinal} {interaction.user.display_name} {self.acao.lower()} {abs(quantidade)} de **{self.tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
 
         await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
+# Select para escolher o tipo de munição
 class TipoSelect(Select):
     def __init__(self, acao):
         options = [
@@ -130,6 +132,7 @@ class TipoSelect(Select):
         self.acao = acao
 
     async def callback(self, interaction: discord.Interaction):
+        # Quando selecionar, abre o modal já com o tipo escolhido
         await interaction.response.send_modal(EstoqueModal(self.acao, self.values[0]))
 
 class TipoSelectView(View):
@@ -143,27 +146,15 @@ class EstoqueView(View):
 
     @discord.ui.button(label="➕ Adicionar Munição", style=discord.ButtonStyle.green)
     async def adicionar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Selecione o tipo de munição para adicionar:",
-            view=TipoSelectView("Adicionar"),
-            ephemeral=True
-        )
+        await interaction.response.send_message("Selecione o tipo de munição para adicionar:", view=TipoSelectView("Adicionar"), ephemeral=True)
 
     @discord.ui.button(label="➖ Retirar Munição", style=discord.ButtonStyle.red)
     async def retirar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Selecione o tipo de munição para retirar:",
-            view=TipoSelectView("Retirar"),
-            ephemeral=True
-        )
+        await interaction.response.send_message("Selecione o tipo de munição para retirar:", view=TipoSelectView("Retirar"), ephemeral=True)
 
     @discord.ui.button(label="✏️ Editar Munição", style=discord.ButtonStyle.blurple)
     async def editar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            "Selecione o tipo de munição para editar:",
-            view=TipoSelectView("Editar"),
-            ephemeral=True
-        )
+        await interaction.response.send_message("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
 @bot.command()
 async def painelmunicao(ctx):
@@ -176,4 +167,5 @@ async def on_ready():
     await atualizar_mensagem_estoque()
     print(f"Bot conectado como {bot.user}")
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+TOKEN = os.getenv("DISCORD_TOKEN") or "SEU_TOKEN_AQUI"
+bot.run(TOKEN)
