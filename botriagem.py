@@ -2,9 +2,8 @@ import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput, Select, SelectOption
 import os
-import datetime
-import asyncio
 import sqlite3
+import asyncio
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -91,10 +90,7 @@ class EstoqueModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         tipo = self.tipo
         if not self.qtd.value.isdigit():
-            msg = await interaction.response.send_message("Quantidade inválida.", ephemeral=True)
-            # Apagar a mensagem depois de 10 segundos
-            await asyncio.sleep(10)
-            await msg.delete()
+            await interaction.response.send_message("Quantidade inválida.", ephemeral=True)
             return
 
         quantidade = int(self.qtd.value)
@@ -120,8 +116,7 @@ class EstoqueModal(Modal):
             else:
                 await canal_log.send(f"{sinal} `{interaction.user.display_name}` {self.acao.lower()} {abs(quantidade)} de **{tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
 
-        msg = await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
-        # Mensagens ephemerais somem sozinhas, mas se quiser apagar manual, teria que ser mensagem normal.
+        await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
 class TipoSelect(Select):
     def __init__(self, acao):
@@ -180,9 +175,5 @@ async def on_ready():
     iniciar_db()
     await atualizar_mensagem_estoque()
     print(f"Bot conectado como {bot.user}")
-
-# Inicie o bot
-TOKEN = os.getenv("DISCORD_TOKEN") or "SEU_TOKEN_AQUI"
-bot.run(TOKEN)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
