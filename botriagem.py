@@ -118,9 +118,9 @@ class EstoqueModal(Modal):
         canal_log = bot.get_channel(ID_CANAL_LOG_MUNICAO)
         if canal_log:
             if self.acao == "Editar":
-                await canal_log.send(f"✏️ {interaction.user.display_name} alterou **{tipo.upper()}** de {estoque_atual} para {quantidade}\n📝 {self.obs.value or 'Sem observações.'}")
+                await canal_log.send(f"✏️ `{interaction.user.display_name}` alterou **{tipo.upper()}** de {estoque_atual} para {quantidade}\n📝 {self.obs.value or 'Sem observações.'}")
             else:
-                await canal_log.send(f"{sinal} {interaction.user.display_name} {self.acao.lower()} {abs(quantidade)} de **{tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
+                await canal_log.send(f"{sinal} `{interaction.user.display_name}` {self.acao.lower()} {abs(quantidade)} de **{tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
 
         await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
@@ -154,5 +154,3 @@ async def on_ready():
 # Inicie o bot
 TOKEN = os.getenv("DISCORD_TOKEN") or "SEU_TOKEN_AQUI"
 bot.run(TOKEN)
-
-bot.run(os.getenv("DISCORD_TOKEN"))
