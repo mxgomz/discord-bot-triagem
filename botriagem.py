@@ -154,3 +154,5 @@ async def on_ready():
 # Inicie o bot
 TOKEN = os.getenv("DISCORD_TOKEN") or "SEU_TOKEN_AQUI"
 bot.run(TOKEN)
+
+bot.run(os.getenv("DISCORD_TOKEN"))
