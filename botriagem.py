@@ -255,11 +255,38 @@ async def on_guild_channel_create(channel):
 async def on_message(message):
     if message.author.bot:
         return
+
+    # NOVA FUNÇÃO: resposta por palavra-chave no canal específico
+    if message.channel.id == 1366016740605165670:
+        conteudo = message.content.lower()
+
+        if conteudo.startswith("toze preços"):
+            await message.channel.send("Use: Toze [Munição / Drogas / Attachs / Armas / Flippers]")
+
+        elif conteudo.startswith("toze munição"):
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/TaoEOn7.png"))
+
+        elif conteudo.startswith("toze drogas"):
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/dciMFnD.png"))
+
+        elif conteudo.startswith("toze attachs"):
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/S1aS1o9.png"))
+
+        elif conteudo.startswith("toze armas"):
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/NvrzKdQ.png"))
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/cr5Xere.png"))
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/ylAyVfq.png"))
+
+        elif conteudo.startswith("toze flippers"):
+            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/h6MJfHF.png"))
+
+    # Mantém sua função original para canal família
     if message.channel.id == ID_CANAL_FAMILIA:
         conteudo = message.content.lower()
         palavras_chave = ["ajuda", "busca", "loc", "salva", "morto", "to na", "to em", "help", "ajudar", "onde"]
         if any(palavra in conteudo for palavra in palavras_chave):
             await message.channel.send("⚠️ **Aviso:** O uso de metagaming no chat da família é proibido. Persistindo, poderão ocorrer punições.")
+
     await bot.process_commands(message)
 
 # ----------- Comando Painel Estoque -----------
