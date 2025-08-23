@@ -14,7 +14,7 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# IDs fixos
+# -------------------- IDs FIXOS --------------------
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
@@ -23,7 +23,34 @@ ID_CANAL_FAMILIA = 1361045908577456138
 ID_CANAL_ESTOQUE = 1397730060030443662
 ID_CANAL_LOG_MUNICAO = 1397730241190953091
 
-# Banco de dados
+# IDs para Painel de Hierarquia
+CANAL_PAINEL_ID = 1408883105225511092
+MENSAGEM_PAINEL_ID = None
+
+# -------------------- CONFIGURAÇÃO DOS CARGOS --------------------
+CARGOS_CONFIG = [
+    {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
+    {"nome": "👥 Vice-Líder", "limite": 1, "role": "Vice-Líder"},
+    {"nome": "⚙️ Gerente de Produção", "limite": 3, "role": "Gerente de Produção"},
+    {"nome": "🌾 Gerente de Farm", "limite": 2, "role": "Gerente de Farm"},
+    {"nome": "📜 Gerente de Recrutamento", "limite": 2, "role": "Gerente de Recrutamento"},
+    {"nome": "💰 Gerente de Vendas", "limite": 2, "role": "Gerente de Vendas"},
+    {"nome": "🎯 Gerente de Ação", "limite": 2, "role": "Gerente de Ação"},
+    {"nome": "💻 Gerente Discord", "limite": 1, "role": "Gerente Discord"},
+    {"nome": "🧑‍💼 Gerente", "limite": 2, "role": "Gerente"},
+    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}  # todos que não tiverem cargos acima
+]
+
+# -------------------- FUNÇÃO DE BARRA DE PROGRESSO --------------------
+def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
+    if limite == 0:
+        return "─" * tamanho
+    proporcao = ocupados / limite
+    preenchidos = round(tamanho * proporcao)
+    vazios = tamanho - preenchidos
+    return "▰" * preenchidos + "▱" * vazios
+
+# -------------------- BANCO DE DADOS ESTOQUE --------------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -64,6 +91,8 @@ mensagem_estoque_id = None
 async def atualizar_mensagem_estoque():
     global mensagem_estoque_id
     canal = bot.get_channel(ID_CANAL_ESTOQUE)
+    if not canal:
+        return
     estoque = obter_estoque()
     conteudo = "📦 **ESTOQUE ATUAL - Facção Turquesa**\n\n"
     for tipo, qtd in estoque.items():
@@ -79,7 +108,7 @@ async def atualizar_mensagem_estoque():
     except Exception as e:
         print(f"Erro ao atualizar mensagem de estoque: {e}")
 
-# ----------- Modal Estoque -----------
+# -------------------- MODAIS E VIEWS DE ESTOQUE --------------------
 class EstoqueModal(Modal):
     def __init__(self, acao, tipo):
         super().__init__(title=f"{acao} Munição - {tipo.upper()}")
@@ -120,8 +149,6 @@ class EstoqueModal(Modal):
 
         await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
-# ----------- Estoque Views -----------
-
 class TipoSelect(Select):
     def __init__(self, acao):
         options = [
@@ -157,8 +184,7 @@ class EstoqueView(View):
     async def editar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# ----------- Triagem -----------
-
+# -------------------- TRIAGEM --------------------
 class TriagemModal(Modal):
     def __init__(self):
         super().__init__(title="Formulário de Triagem")
@@ -222,8 +248,62 @@ class TriagemView(View):
         modal = TriagemModal()
         await interaction.response.send_modal(modal)
 
-# ----------- Eventos -----------
+# -------------------- FUNÇÕES DO PAINEL DE HIERARQUIA --------------------
+async def atualizar_mensagem_painel():
+    canal = bot.get_channel(CANAL_PAINEL_ID)
+    if not canal:
+        return
+    guild = canal.guild
+    embed = discord.Embed(title="📌 Painel de Hierarquia", color=discord.Color.blue())
 
+    membros_ocupados = set()
+    for config in CARGOS_CONFIG:
+        role = discord.utils.get(guild.roles, name=config["role"])
+        membros = []
+
+        if config["role"] == "Membros":
+            membros = [m.mention for m in guild.members if not m.bot and m not in membros_ocupados]
+        elif role:
+            membros = [m.mention for m in guild.members if role in m.roles and not m.bot]
+            for m in guild.members:
+                if role in m.roles:
+                    membros_ocupados.add(m)
+
+        ocupados = len(membros)
+        limite = config["limite"]
+        lista_membros = "\n".join(f"➔ {m}" for m in membros) if membros else "🔴 Nenhum"
+        barra = gerar_barra(ocupados, limite)
+
+        embed.add_field(
+            name=f"{config['nome']} - ({ocupados}/{limite})" if limite > 0 else f"{config['nome']} - ({ocupados})",
+            value=f"{lista_membros}\n\n{barra}",
+            inline=False
+        )
+
+    global MENSAGEM_PAINEL_ID
+    try:
+        if MENSAGEM_PAINEL_ID:
+            msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
+            await msg.edit(embed=embed)
+            return
+    except:
+        MENSAGEM_PAINEL_ID = None
+
+    msg = await canal.send(embed=embed)
+    MENSAGEM_PAINEL_ID = msg.id
+
+# -------------------- COMANDO PARA ATUALIZAR PAINEL --------------------
+@bot.command()
+async def atualizarlista(ctx):
+    cargo_permitido = ctx.guild.get_role(1361719183787954236)
+    if cargo_permitido not in ctx.author.roles:
+        await ctx.send("❌ Você não tem permissão para atualizar a lista.")
+        return
+
+    await atualizar_mensagem_painel()
+    await ctx.send("✅ Painel de hierarquia atualizado com sucesso.")
+
+# -------------------- EVENTOS --------------------
 @bot.event
 async def on_ready():
     iniciar_db()
@@ -236,6 +316,7 @@ async def on_ready():
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
 
+# -------------------- OUTROS EVENTOS E COMANDOS --------------------
 @bot.event
 async def on_guild_channel_create(channel):
     if isinstance(channel, discord.TextChannel) and channel.name.startswith("ticket-"):
@@ -256,31 +337,23 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # NOVA FUNÇÃO: resposta por palavra-chave no canal específico
     if message.channel.id == 1366016740605165670:
         conteudo = message.content.lower()
-
         if conteudo.startswith("toze preços"):
             await message.channel.send("Use: Toze [Munição / Drogas / Attachs / Armas / Flippers]")
-
         elif conteudo.startswith("toze munição"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/TaoEOn7.png"))
-
         elif conteudo.startswith("toze drogas"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/dciMFnD.png"))
-
         elif conteudo.startswith("toze attachs"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/S1aS1o9.png"))
-
         elif conteudo.startswith("toze armas"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/NvrzKdQ.png"))
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/cr5Xere.png"))
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/ylAyVfq.png"))
-
         elif conteudo.startswith("toze flippers"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/h6MJfHF.png"))
 
-    # Mantém sua função original para canal família
     if message.channel.id == ID_CANAL_FAMILIA:
         conteudo = message.content.lower()
         palavras_chave = ["ajuda", "busca", "loc", "salva", "morto", "to na", "to em", "help", "ajudar", "onde"]
@@ -289,11 +362,11 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ----------- Comando Painel Estoque -----------
-
+# -------------------- COMANDO DE PAINEL DE MUNIÇÃO --------------------
 @bot.command()
 async def painelmunicao(ctx):
     await atualizar_mensagem_estoque()
     await ctx.send("Painel de munições iniciado no canal correto.")
 
+# -------------------- RODAR BOT --------------------
 bot.run(os.getenv("DISCORD_TOKEN"))
