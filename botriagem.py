@@ -317,8 +317,15 @@ async def on_ready():
     canal = bot.get_channel(ID_CANAL_TRIAGEM)
     if canal:
         mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
-        view = TriagemView()
-        await canal.send(mensagem_fixa, view=view)
+
+        # Verifica se já existe uma mensagem fixa do bot nesse canal
+        async for msg in canal.history(limit=20):
+            if msg.author == bot.user and "Clique no botão abaixo" in msg.content:
+                break
+        else:
+            view = TriagemView()
+            await canal.send(mensagem_fixa, view=view)
+
 
 @bot.event
 async def on_guild_channel_create(channel):
