@@ -314,21 +314,7 @@ class TriagemView(View):
             await interaction.response.send_message("Não tenho permissão para alterar apelido ou cargo.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Erro ao processar: {e}", ephemeral=True)
-
-class TriagemView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
-    async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        member = interaction.guild.get_member(interaction.user.id)
-        cargo_membro = interaction.guild.get_role(ID_CARGO_MEMBRO)
-        if member and cargo_membro in member.roles:
-            await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
-            return
-        modal = TriagemModal()
-        await interaction.response.send_modal(modal)
-
+            
 # ----------- Eventos -----------
 
 @bot.event
