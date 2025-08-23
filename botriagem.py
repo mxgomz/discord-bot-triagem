@@ -29,7 +29,6 @@ ID_CARGO_HIERARQUIA = 1361719183787954236  # cargo permitido para usar o comando
 MENSAGEM_PAINEL_ID = None  # Para armazenar a mensagem do painel
 
 # ---------------------- Função de Hierarquia ----------------------
-# Definição dos cargos (nome do painel, limite de membros, nome real do cargo no Discord)
 CARGOS_CONFIG = [
     {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
     {"nome": "👥 Vice-Líder", "limite": 0, "role": "Vice-Líder"},
@@ -44,8 +43,7 @@ CARGOS_CONFIG = [
 ]
 
 def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
-    """Gera uma barra de progresso estilo Discord"""
-    if limite == 0:  # sem limite → só barra vazia
+    if limite == 0:
         return "─" * tamanho
     proporcao = ocupados / limite
     preenchidos = round(tamanho * proporcao)
@@ -103,13 +101,13 @@ async def atualizarlista(ctx):
     author = ctx.author
     cargo_autorizado = ctx.guild.get_role(ID_CARGO_HIERARQUIA)
     if cargo_autorizado not in author.roles:
-        await ctx.send("❌ Você não tem permissão para usar este comando.")
+        await ctx.send("❌ Você não tem permissão para usar este comando.", delete_after=5)
         return
 
     await atualizar_mensagem_painel()
-    await ctx.send("✅ Painel de hierarquia atualizado!")
+    await ctx.send("✅ Painel de hierarquia atualizado!", delete_after=5)
 
-# Banco de dados
+# ---------------------- Banco de Dados Estoque ----------------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -342,7 +340,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # NOVA FUNÇÃO: resposta por palavra-chave no canal específico
+    # Resposta por palavra-chave
     if message.channel.id == 1366016740605165670:
         conteudo = message.content.lower()
 
@@ -366,7 +364,7 @@ async def on_message(message):
         elif conteudo.startswith("toze flippers"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/h6MJfHF.png"))
 
-    # Mantém sua função original para canal família
+    # Canal família
     if message.channel.id == ID_CANAL_FAMILIA:
         conteudo = message.content.lower()
         palavras_chave = ["ajuda", "busca", "loc", "salva", "morto", "to na", "to em", "help", "ajudar", "onde"]
