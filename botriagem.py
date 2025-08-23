@@ -67,15 +67,15 @@ def obter_estoque():
 # ------------------ Painel de Hierarquia ------------------
 CARGOS_CONFIG = [
     {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
-    {"nome": "👥 Vice-Líder", "limite": 1, "role": "Vice-Líder"},
-    {"nome": "⚙️ Gerente de Produção", "limite": 3, "role": "Gerente de Produção"},
-    {"nome": "🌾 Gerente de Farm", "limite": 2, "role": "Gerente de Farm"},
-    {"nome": "📜 Gerente de Recrutamento", "limite": 2, "role": "Gerente de Recrutamento"},
-    {"nome": "💰 Gerente de Vendas", "limite": 2, "role": "Gerente de Vendas"},
-    {"nome": "🎯 Gerente de Ação", "limite": 2, "role": "Gerente de Ação"},
-    {"nome": "💻 Gerente Discord", "limite": 1, "role": "Gerente Discord"},
-    {"nome": "🧑‍💼 Gerente", "limite": 2, "role": "Gerente"},
-    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}  # todos que não tiverem cargos acima
+    {"nome": "👥 Vice-Líder", "limite": 0, "role": "Vice-Líder"},
+    {"nome": "⚙️ Gerente de Produção", "limite": 0, "role": "Gerente de Produção"},
+    {"nome": "🌾 Gerente de Farm", "limite": 0, "role": "Gerente de Farm"},
+    {"nome": "📜 Gerente de Recrutamento", "limite": 0, "role": "Gerente de Recrutamento"},
+    {"nome": "💰 Gerente de Vendas", "limite": 0, "role": "Gerente de Vendas"},
+    {"nome": "🎯 Gerente de Ação", "limite": 0, "role": "Gerente de Ação"},
+    {"nome": "💻 Gerente Discord", "limite": 0, "role": "Gerente Discord"},
+    {"nome": "🧑‍💼 Gerente", "limite": 0, "role": "Gerente"},
+    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"} 
 ]
 
 def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
