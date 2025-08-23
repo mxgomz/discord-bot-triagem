@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput, Select
-from discord import SelectOption
+from discord import SelectOption, app_commands
 import os
 import datetime
 import asyncio
@@ -14,7 +14,7 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# -------------------- IDs FIXOS --------------------
+# -------------------- IDs fixos --------------------
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
@@ -22,12 +22,11 @@ ID_CANAL_TICKET = 1361677898980790314
 ID_CANAL_FAMILIA = 1361045908577456138
 ID_CANAL_ESTOQUE = 1397730060030443662
 ID_CANAL_LOG_MUNICAO = 1397730241190953091
-
-# IDs para Painel de Hierarquia
-CANAL_PAINEL_ID = 1408883105225511092
+ID_CARGO_ATUALIZAR_LISTA = 1361719183787954236
+CANAL_PAINEL_ID = 1408883105225511092  # Canal do painel
 MENSAGEM_PAINEL_ID = None
 
-# -------------------- CONFIGURAÇÃO DOS CARGOS --------------------
+# -------------------- Configuração dos cargos --------------------
 CARGOS_CONFIG = [
     {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
     {"nome": "👥 Vice-Líder", "limite": 1, "role": "Vice-Líder"},
@@ -38,10 +37,10 @@ CARGOS_CONFIG = [
     {"nome": "🎯 Gerente de Ação", "limite": 2, "role": "Gerente de Ação"},
     {"nome": "💻 Gerente Discord", "limite": 1, "role": "Gerente Discord"},
     {"nome": "🧑‍💼 Gerente", "limite": 2, "role": "Gerente"},
-    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}  # todos que não tiverem cargos acima
+    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}
 ]
 
-# -------------------- FUNÇÃO DE BARRA DE PROGRESSO --------------------
+# -------------------- Função para barra de progresso --------------------
 def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
     if limite == 0:
         return "─" * tamanho
@@ -50,7 +49,7 @@ def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
     vazios = tamanho - preenchidos
     return "▰" * preenchidos + "▱" * vazios
 
-# -------------------- BANCO DE DADOS ESTOQUE --------------------
+# -------------------- Banco de dados --------------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -91,8 +90,6 @@ mensagem_estoque_id = None
 async def atualizar_mensagem_estoque():
     global mensagem_estoque_id
     canal = bot.get_channel(ID_CANAL_ESTOQUE)
-    if not canal:
-        return
     estoque = obter_estoque()
     conteudo = "📦 **ESTOQUE ATUAL - Facção Turquesa**\n\n"
     for tipo, qtd in estoque.items():
@@ -108,7 +105,7 @@ async def atualizar_mensagem_estoque():
     except Exception as e:
         print(f"Erro ao atualizar mensagem de estoque: {e}")
 
-# -------------------- MODAIS E VIEWS DE ESTOQUE --------------------
+# -------------------- Modal e Views de Estoque --------------------
 class EstoqueModal(Modal):
     def __init__(self, acao, tipo):
         super().__init__(title=f"{acao} Munição - {tipo.upper()}")
@@ -184,7 +181,7 @@ class EstoqueView(View):
     async def editar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# -------------------- TRIAGEM --------------------
+# -------------------- Triagem --------------------
 class TriagemModal(Modal):
     def __init__(self):
         super().__init__(title="Formulário de Triagem")
@@ -248,8 +245,9 @@ class TriagemView(View):
         modal = TriagemModal()
         await interaction.response.send_modal(modal)
 
-# -------------------- FUNÇÕES DO PAINEL DE HIERARQUIA --------------------
+# -------------------- Funções do painel --------------------
 async def atualizar_mensagem_painel():
+    global MENSAGEM_PAINEL_ID
     canal = bot.get_channel(CANAL_PAINEL_ID)
     if not canal:
         return
@@ -280,7 +278,6 @@ async def atualizar_mensagem_painel():
             inline=False
         )
 
-    global MENSAGEM_PAINEL_ID
     try:
         if MENSAGEM_PAINEL_ID:
             msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
@@ -292,22 +289,22 @@ async def atualizar_mensagem_painel():
     msg = await canal.send(embed=embed)
     MENSAGEM_PAINEL_ID = msg.id
 
-# -------------------- COMANDO PARA ATUALIZAR PAINEL --------------------
-@bot.command()
-async def atualizarlista(ctx):
-    cargo_permitido = ctx.guild.get_role(1361719183787954236)
-    if cargo_permitido not in ctx.author.roles:
-        await ctx.send("❌ Você não tem permissão para atualizar a lista.")
+# -------------------- Slash Command --------------------
+@bot.tree.command(name="atualizarlista", description="Atualiza o painel de hierarquia")
+async def atualizar_lista(interaction: discord.Interaction):
+    if ID_CARGO_ATUALIZAR_LISTA not in [role.id for role in interaction.user.roles]:
+        await interaction.response.send_message("❌ Você não tem permissão para atualizar a lista.", ephemeral=True)
         return
-
     await atualizar_mensagem_painel()
-    await ctx.send("✅ Painel de hierarquia atualizado com sucesso.")
+    await interaction.response.send_message("✅ Painel de hierarquia atualizado com sucesso.", ephemeral=True)
 
-# -------------------- EVENTOS --------------------
+# -------------------- Eventos --------------------
 @bot.event
 async def on_ready():
     iniciar_db()
     await atualizar_mensagem_estoque()
+    await atualizar_mensagem_painel()
+    await bot.tree.sync()  # registra slash commands
     print(f"✅ Bot online como {bot.user}")
 
     canal = bot.get_channel(ID_CANAL_TRIAGEM)
@@ -316,7 +313,6 @@ async def on_ready():
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
 
-# -------------------- OUTROS EVENTOS E COMANDOS --------------------
 @bot.event
 async def on_guild_channel_create(channel):
     if isinstance(channel, discord.TextChannel) and channel.name.startswith("ticket-"):
@@ -362,11 +358,4 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# -------------------- COMANDO DE PAINEL DE MUNIÇÃO --------------------
-@bot.command()
-async def painelmunicao(ctx):
-    await atualizar_mensagem_estoque()
-    await ctx.send("Painel de munições iniciado no canal correto.")
-
-# -------------------- RODAR BOT --------------------
 bot.run(os.getenv("DISCORD_TOKEN"))
