@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput, Select
-from discord import SelectOption, app_commands
+from discord import SelectOption
 import os
 import datetime
 import asyncio
@@ -14,7 +14,7 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# -------------------- IDs fixos --------------------
+# ------------------ IDs Fixos ------------------
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
@@ -23,33 +23,12 @@ ID_CANAL_FAMILIA = 1361045908577456138
 ID_CANAL_ESTOQUE = 1397730060030443662
 ID_CANAL_LOG_MUNICAO = 1397730241190953091
 ID_CARGO_ATUALIZAR_LISTA = 1361719183787954236
-CANAL_PAINEL_ID = 1408883105225511092  # Canal do painel
+ID_CANAL_PAINEL = 1408883105225511092
+
 MENSAGEM_PAINEL_ID = None
+mensagem_estoque_id = None
 
-# -------------------- Configuração dos cargos --------------------
-CARGOS_CONFIG = [
-    {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
-    {"nome": "👥 Vice-Líder", "limite": 1, "role": "Vice-Líder"},
-    {"nome": "⚙️ Gerente de Produção", "limite": 3, "role": "Gerente de Produção"},
-    {"nome": "🌾 Gerente de Farm", "limite": 2, "role": "Gerente de Farm"},
-    {"nome": "📜 Gerente de Recrutamento", "limite": 2, "role": "Gerente de Recrutamento"},
-    {"nome": "💰 Gerente de Vendas", "limite": 2, "role": "Gerente de Vendas"},
-    {"nome": "🎯 Gerente de Ação", "limite": 2, "role": "Gerente de Ação"},
-    {"nome": "💻 Gerente Discord", "limite": 1, "role": "Gerente Discord"},
-    {"nome": "🧑‍💼 Gerente", "limite": 2, "role": "Gerente"},
-    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}
-]
-
-# -------------------- Função para barra de progresso --------------------
-def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
-    if limite == 0:
-        return "─" * tamanho
-    proporcao = ocupados / limite
-    preenchidos = round(tamanho * proporcao)
-    vazios = tamanho - preenchidos
-    return "▰" * preenchidos + "▱" * vazios
-
-# -------------------- Banco de dados --------------------
+# ------------------ Banco de Dados ------------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -85,27 +64,89 @@ def obter_estoque():
     con.close()
     return dados
 
-mensagem_estoque_id = None
+# ------------------ Painel de Hierarquia ------------------
+CARGOS_CONFIG = [
+    {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
+    {"nome": "👥 Vice-Líder", "limite": 1, "role": "Vice-Líder"},
+    {"nome": "⚙️ Gerente de Produção", "limite": 3, "role": "Gerente de Produção"},
+    {"nome": "🌾 Gerente de Farm", "limite": 2, "role": "Gerente de Farm"},
+    {"nome": "📜 Gerente de Recrutamento", "limite": 2, "role": "Gerente de Recrutamento"},
+    {"nome": "💰 Gerente de Vendas", "limite": 2, "role": "Gerente de Vendas"},
+    {"nome": "🎯 Gerente de Ação", "limite": 2, "role": "Gerente de Ação"},
+    {"nome": "💻 Gerente Discord", "limite": 1, "role": "Gerente Discord"},
+    {"nome": "🧑‍💼 Gerente", "limite": 2, "role": "Gerente"},
+    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}  # todos que não tiverem cargos acima
+]
 
-async def atualizar_mensagem_estoque():
-    global mensagem_estoque_id
-    canal = bot.get_channel(ID_CANAL_ESTOQUE)
-    estoque = obter_estoque()
-    conteudo = "📦 **ESTOQUE ATUAL - Facção Turquesa**\n\n"
-    for tipo, qtd in estoque.items():
-        conteudo += f"🔫 {tipo.upper()}: {qtd}\n"
-    view = EstoqueView()
+def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
+    if limite == 0:
+        return "─" * tamanho
+    proporcao = ocupados / limite
+    preenchidos = round(tamanho * proporcao)
+    vazios = tamanho - preenchidos
+    return "▰" * preenchidos + "▱" * vazios
+
+async def atualizar_mensagem_painel():
+    global MENSAGEM_PAINEL_ID
+    canal = bot.get_channel(ID_CANAL_PAINEL)
+    if not canal:
+        return
+
+    guild = canal.guild
+    embed = discord.Embed(title="📌 Painel de Hierarquia", color=discord.Color.blue())
+    membros_ocupados = set()
+
+    for config in CARGOS_CONFIG:
+        role = discord.utils.get(guild.roles, name=config["role"])
+        membros = []
+
+        if config["role"] == "Membros":
+            membros = [m.mention for m in guild.members if not m.bot and m not in membros_ocupados]
+        elif role:
+            membros = [m.mention for m in guild.members if role in m.roles and not m.bot]
+            for m in guild.members:
+                if role in m.roles:
+                    membros_ocupados.add(m)
+
+        ocupados = len(membros)
+        limite = config["limite"]
+        lista_membros = "\n".join(f"➔ {m}" for m in membros) if membros else "🔴 Nenhum"
+        barra = gerar_barra(ocupados, limite)
+
+        embed.add_field(
+            name=f"{config['nome']} - ({ocupados}/{limite})" if limite > 0 else f"{config['nome']} - ({ocupados})",
+            value=f"{lista_membros}\n\n{barra}",
+            inline=False
+        )
+
     try:
-        if mensagem_estoque_id:
-            msg = await canal.fetch_message(mensagem_estoque_id)
-            await msg.edit(content=conteudo, view=view)
+        if MENSAGEM_PAINEL_ID:
+            msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
+            await msg.edit(embed=embed)
         else:
-            msg = await canal.send(content=conteudo, view=view)
-            mensagem_estoque_id = msg.id
-    except Exception as e:
-        print(f"Erro ao atualizar mensagem de estoque: {e}")
+            msg = await canal.send(embed=embed)
+            MENSAGEM_PAINEL_ID = msg.id
+    except:
+        msg = await canal.send(embed=embed)
+        MENSAGEM_PAINEL_ID = msg.id
 
-# -------------------- Modal e Views de Estoque --------------------
+# ------------------ Slash Command para atualizar painel ------------------
+@bot.tree.command(name="atualizarlista", description="Atualiza o painel de hierarquia")
+async def atualizar_lista(interaction: discord.Interaction):
+    if ID_CARGO_ATUALIZAR_LISTA not in [role.id for role in interaction.user.roles]:
+        await interaction.response.send_message("❌ Você não tem permissão para atualizar a lista.", ephemeral=True)
+        return
+
+    await atualizar_mensagem_painel()
+    await interaction.response.send_message("✅ Painel de hierarquia atualizado com sucesso.", ephemeral=True)
+
+# ------------------ Comando de Estoque ------------------
+@bot.command()
+async def painelmunicao(ctx):
+    await atualizar_mensagem_estoque()
+    await ctx.send("✅ Painel de munições iniciado no canal correto.")
+
+# ------------------ Modal e Views de Estoque ------------------
 class EstoqueModal(Modal):
     def __init__(self, acao, tipo):
         super().__init__(title=f"{acao} Munição - {tipo.upper()}")
@@ -148,12 +189,7 @@ class EstoqueModal(Modal):
 
 class TipoSelect(Select):
     def __init__(self, acao):
-        options = [
-            SelectOption(label="5mm", value="5mm"),
-            SelectOption(label="9mm", value="9mm"),
-            SelectOption(label="762mm", value="762mm"),
-            SelectOption(label="12cbc", value="12cbc"),
-        ]
+        options = [SelectOption(label=t, value=t) for t in ["5mm","9mm","762mm","12cbc"]]
         super().__init__(placeholder="Selecione o tipo de munição", options=options)
         self.acao = acao
 
@@ -181,7 +217,26 @@ class EstoqueView(View):
     async def editar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# -------------------- Triagem --------------------
+async def atualizar_mensagem_estoque():
+    global mensagem_estoque_id
+    canal = bot.get_channel(ID_CANAL_ESTOQUE)
+    if not canal:
+        return
+
+    estoque = obter_estoque()
+    conteudo = "📦 **ESTOQUE ATUAL - Facção Turquesa**\n\n" + "\n".join(f"🔫 {tipo.upper()}: {qtd}" for tipo,qtd in estoque.items())
+    view = EstoqueView()
+    try:
+        if mensagem_estoque_id:
+            msg = await canal.fetch_message(mensagem_estoque_id)
+            await msg.edit(content=conteudo, view=view)
+        else:
+            msg = await canal.send(content=conteudo, view=view)
+            mensagem_estoque_id = msg.id
+    except Exception as e:
+        print(f"Erro ao atualizar mensagem de estoque: {e}")
+
+# ------------------ Triagem ------------------
 class TriagemModal(Modal):
     def __init__(self):
         super().__init__(title="Formulário de Triagem")
@@ -210,11 +265,9 @@ class TriagemModal(Modal):
             cargo = interaction.guild.get_role(ID_CARGO_MEMBRO)
             if cargo:
                 await member.add_roles(cargo)
-
                 url = f"https://discord.com/channels/{interaction.guild.id}/{ID_CANAL_TICKET}"
                 view = View()
                 view.add_item(Button(label="🎫 Abrir Ticket", style=discord.ButtonStyle.blurple, url=url))
-
                 await interaction.response.send_message(
                     f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅\n\nClique abaixo para abrir um **ticket** e continuar o processo.",
                     ephemeral=True,
@@ -245,65 +298,11 @@ class TriagemView(View):
         modal = TriagemModal()
         await interaction.response.send_modal(modal)
 
-# -------------------- Funções do painel --------------------
-async def atualizar_mensagem_painel():
-    global MENSAGEM_PAINEL_ID
-    canal = bot.get_channel(CANAL_PAINEL_ID)
-    if not canal:
-        return
-    guild = canal.guild
-    embed = discord.Embed(title="📌 Painel de Hierarquia", color=discord.Color.blue())
-
-    membros_ocupados = set()
-    for config in CARGOS_CONFIG:
-        role = discord.utils.get(guild.roles, name=config["role"])
-        membros = []
-
-        if config["role"] == "Membros":
-            membros = [m.mention for m in guild.members if not m.bot and m not in membros_ocupados]
-        elif role:
-            membros = [m.mention for m in guild.members if role in m.roles and not m.bot]
-            for m in guild.members:
-                if role in m.roles:
-                    membros_ocupados.add(m)
-
-        ocupados = len(membros)
-        limite = config["limite"]
-        lista_membros = "\n".join(f"➔ {m}" for m in membros) if membros else "🔴 Nenhum"
-        barra = gerar_barra(ocupados, limite)
-
-        embed.add_field(
-            name=f"{config['nome']} - ({ocupados}/{limite})" if limite > 0 else f"{config['nome']} - ({ocupados})",
-            value=f"{lista_membros}\n\n{barra}",
-            inline=False
-        )
-
-    try:
-        if MENSAGEM_PAINEL_ID:
-            msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
-            await msg.edit(embed=embed)
-            return
-    except:
-        MENSAGEM_PAINEL_ID = None
-
-    msg = await canal.send(embed=embed)
-    MENSAGEM_PAINEL_ID = msg.id
-
-# -------------------- Slash Command --------------------
-@bot.tree.command(name="atualizarlista", description="Atualiza o painel de hierarquia")
-async def atualizar_lista(interaction: discord.Interaction):
-    if ID_CARGO_ATUALIZAR_LISTA not in [role.id for role in interaction.user.roles]:
-        await interaction.response.send_message("❌ Você não tem permissão para atualizar a lista.", ephemeral=True)
-        return
-    await atualizar_mensagem_painel()
-    await interaction.response.send_message("✅ Painel de hierarquia atualizado com sucesso.", ephemeral=True)
-
-# -------------------- Eventos --------------------
+# ------------------ Eventos ------------------
 @bot.event
 async def on_ready():
     iniciar_db()
     await atualizar_mensagem_estoque()
-    await atualizar_mensagem_painel()
     await bot.tree.sync()  # registra slash commands
     print(f"✅ Bot online como {bot.user}")
 
@@ -358,4 +357,5 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+# ------------------ Rodar Bot ------------------
 bot.run(os.getenv("DISCORD_TOKEN"))
