@@ -372,7 +372,7 @@ async def on_message(message):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/h6MJfHF.png"))
 
     # Canal família
-    if message.channel.id == ID_CANAL_FAMILIA:
+    elif message.channel.id == ID_CANAL_FAMILIA:
         conteudo = message.content.lower()
         palavras_chave = ["ajuda", "busca", "loc", "salva", "morto", "to na", "to em", "help", "ajudar", "onde"]
         if any(palavra in conteudo for palavra in palavras_chave):
