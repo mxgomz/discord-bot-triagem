@@ -118,6 +118,21 @@ async def atualizarlista(ctx):
     await atualizar_mensagem_painel()
     await ctx.send("✅ Painel de hierarquia atualizado!", delete_after=5)
 
+# ---------------------- Comando Triagem -----------------------------
+@bot.command()
+@commands.has_role(ID_CARGO_HIERARQUIA)  # só quem tem cargo hierarquia pode usar
+async def enviartriagem(ctx):
+    canal = bot.get_channel(ID_CANAL_TRIAGEM)
+    if not canal:
+        await ctx.send("Canal de triagem não encontrado.", delete_after=5)
+        return
+
+    mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
+    view = TriagemView()
+    await canal.send(mensagem_fixa, view=view)
+    await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
+#----------------------------------------------------------------------
+
 # ---------------------- Banco de Dados Estoque ----------------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
