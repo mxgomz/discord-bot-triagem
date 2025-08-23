@@ -270,12 +270,9 @@ class TriagemView(View):
             await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
             return
 
-        # Defer para evitar timeout de interação
-        await interaction.response.defer(ephemeral=True)
+        # Abrir modal corretamente
         modal = TriagemModal()
-        await interaction.followup.send("Abrindo formulário de triagem...", ephemeral=True)
-        await interaction.user.send_modal(modal)  # Abre modal diretamente para o usuário
-
+        await interaction.response.send_modal(modal)
 
         try:
             await member.edit(nick=apelido)
