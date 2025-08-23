@@ -105,7 +105,6 @@ async def atualizar_mensagem_painel():
     msg = await canal.send(embed=embed)
     MENSAGEM_PAINEL_ID = msg.id
 
-
 # ---------------------- Comando !atualizarlista ----------------------
 @bot.command()
 async def atualizarlista(ctx):
@@ -131,7 +130,58 @@ async def enviartriagem(ctx):
     view = TriagemView()
     await canal.send(mensagem_fixa, view=view)
     await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
-#----------------------------------------------------------------------
+
+# ---------------------- Triagem Modal e View ----------------------
+class TriagemModal(Modal):
+    def __init__(self):
+        super().__init__(title="Triagem")
+        self.apelido_input = TextInput(label="Apelido", placeholder="Digite seu apelido")
+        self.passaporte_input = TextInput(label="Passaporte", placeholder="Digite seu passaporte")
+        self.add_item(self.apelido_input)
+        self.add_item(self.passaporte_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        apelido = self.apelido_input.value
+        member = interaction.user
+        guild = interaction.guild
+        cargo_membro = guild.get_role(ID_CARGO_MEMBRO)
+
+        if cargo_membro in member.roles:
+            await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
+            return
+
+        try:
+            await member.edit(nick=apelido)
+            await member.add_roles(cargo_membro)
+
+            url = f"https://discord.com/channels/{guild.id}/{ID_CANAL_TICKET}"
+            view = View()
+            view.add_item(Button(label="🎫 Abrir Ticket", style=discord.ButtonStyle.blurple, url=url))
+
+            await interaction.response.send_message(
+                f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅\n\nClique abaixo para abrir um **ticket** e continuar o processo.",
+                ephemeral=True,
+                view=view
+            )
+
+            canal_logs = guild.get_channel(ID_CANAL_LOGS)
+            if canal_logs:
+                await canal_logs.send(f"✅ `{apelido}` acabou de passar pela triagem.")
+
+        except discord.Forbidden:
+            await interaction.response.send_message("Não tenho permissão para alterar apelido ou cargo.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Erro ao processar a triagem: {e}", ephemeral=True)
+
+
+class TriagemView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
+    async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = TriagemModal()
+        await interaction.response.send_modal(modal)
 
 # ---------------------- Banco de Dados Estoque ----------------------
 def iniciar_db():
@@ -248,7 +298,7 @@ class TipoSelect(Select):
 
 class TipoSelectView(View):
     def __init__(self, acao):
-        super().__init__(timeout=None)  # Timeout indefinido
+        super().__init__(timeout=None)
         self.add_item(TipoSelect(acao))
 
 
@@ -271,52 +321,7 @@ class EstoqueView(View):
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# ----------- Triagem View Corrigida -----------
-class TriagemView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
-    async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        member = interaction.guild.get_member(interaction.user.id)
-        cargo_membro = interaction.guild.get_role(ID_CARGO_MEMBRO)
-
-        if member and cargo_membro in member.roles:
-            await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
-            return
-
-        # Abrir modal corretamente
-        modal = TriagemModal()
-        await interaction.response.send_modal(modal)
-
-        try:
-            await member.edit(nick=apelido)
-            cargo = interaction.guild.get_role(ID_CARGO_MEMBRO)
-            if cargo:
-                await member.add_roles(cargo)
-
-                url = f"https://discord.com/channels/{interaction.guild.id}/{ID_CANAL_TICKET}"
-                view = View()
-                view.add_item(Button(label="🎫 Abrir Ticket", style=discord.ButtonStyle.blurple, url=url))
-
-                await interaction.response.send_message(
-                    f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅\n\nClique abaixo para abrir um **ticket** e continuar o processo.",
-                    ephemeral=True,
-                    view=view
-                )
-
-                canal_logs = interaction.guild.get_channel(ID_CANAL_LOGS)
-                if canal_logs:
-                    await canal_logs.send(f"✅ `{apelido}` acabou de passar pela triagem.")
-            else:
-                await interaction.response.send_message("Cargo de membro não encontrado.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message("Não tenho permissão para alterar apelido ou cargo.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"Erro ao processar: {e}", ephemeral=True)
-            
 # ----------- Eventos -----------
-
 @bot.event
 async def on_ready():
     iniciar_db()
@@ -328,7 +333,6 @@ async def on_ready():
         mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
-
 
 @bot.event
 async def on_guild_channel_create(channel):
@@ -384,7 +388,6 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ----------- Comando Painel Estoque -----------
-
 @bot.command()
 async def painelmunicao(ctx):
     await atualizar_mensagem_estoque()
