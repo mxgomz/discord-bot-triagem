@@ -85,15 +85,26 @@ async def atualizar_mensagem_painel():
             inline=False
         )
 
-    try:
-        if MENSAGEM_PAINEL_ID:
+    # Se já tem ID válido, tenta editar
+    if MENSAGEM_PAINEL_ID:
+        try:
             msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
             await msg.edit(embed=embed)
-        else:
-            msg = await canal.send(embed=embed)
-            MENSAGEM_PAINEL_ID = msg.id
-    except:
-        MENSAGEM_PAINEL_ID = None
+            return
+        except:
+            MENSAGEM_PAINEL_ID = None
+
+    # Se não tem ID válido, procura no histórico
+    async for m in canal.history(limit=10):
+        if m.author == bot.user and m.embeds and m.embeds[0].title == "📌 Painel de Hierarquia":
+            await m.edit(embed=embed)
+            MENSAGEM_PAINEL_ID = m.id
+            return
+
+    # Se não encontrou nada, manda uma nova
+    msg = await canal.send(embed=embed)
+    MENSAGEM_PAINEL_ID = msg.id
+
 
 # ---------------------- Comando !atualizarlista ----------------------
 @bot.command()
