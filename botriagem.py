@@ -215,8 +215,7 @@ class EstoqueModal(Modal):
 
         await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
-# ----------- Estoque Views -----------
-
+# ----------- Estoque Views Corrigida -----------
 class TipoSelect(Select):
     def __init__(self, acao):
         options = [
@@ -231,10 +230,12 @@ class TipoSelect(Select):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(EstoqueModal(self.acao, self.values[0]))
 
+
 class TipoSelectView(View):
     def __init__(self, acao):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None)  # Timeout indefinido
         self.add_item(TipoSelect(acao))
+
 
 class EstoqueView(View):
     def __init__(self):
@@ -242,40 +243,39 @@ class EstoqueView(View):
 
     @discord.ui.button(label="➕ Adicionar Munição", style=discord.ButtonStyle.green)
     async def adicionar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Selecione o tipo de munição para adicionar:", view=TipoSelectView("Adicionar"), ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send("Selecione o tipo de munição para adicionar:", view=TipoSelectView("Adicionar"), ephemeral=True)
 
     @discord.ui.button(label="➖ Retirar Munição", style=discord.ButtonStyle.red)
     async def retirar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Selecione o tipo de munição para retirar:", view=TipoSelectView("Retirar"), ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send("Selecione o tipo de munição para retirar:", view=TipoSelectView("Retirar"), ephemeral=True)
 
     @discord.ui.button(label="✏️ Editar Munição", style=discord.ButtonStyle.blurple)
     async def editar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
+        await interaction.followup.send("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# ----------- Triagem -----------
-
-class TriagemModal(Modal):
+# ----------- Triagem View Corrigida -----------
+class TriagemView(View):
     def __init__(self):
-        super().__init__(title="Formulário de Triagem")
-        self.nome = TextInput(label="Nome", placeholder="Digite seu nome", max_length=100)
-        self.passaporte = TextInput(label="Passaporte (somente números)", placeholder="Ex: 123456", max_length=20)
-        self.add_item(self.nome)
-        self.add_item(self.passaporte)
+        super().__init__(timeout=None)
 
-    async def on_submit(self, interaction: discord.Interaction):
-        nome = self.nome.value.strip()
-        passaporte = self.passaporte.value.strip()
-
-        if not passaporte.isdigit():
-            await interaction.response.send_message("Passaporte inválido, deve conter somente números.", ephemeral=True)
-            return
-
-        apelido = f"{nome} #{passaporte}"
+    @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
+    async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         member = interaction.guild.get_member(interaction.user.id)
+        cargo_membro = interaction.guild.get_role(ID_CARGO_MEMBRO)
 
-        if member and any(role.id == ID_CARGO_MEMBRO or role.position > interaction.guild.get_role(ID_CARGO_MEMBRO).position for role in member.roles):
-            await interaction.response.send_message("Você já está cadastrado como membro ou possui cargo superior.", ephemeral=True)
+        if member and cargo_membro in member.roles:
+            await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
             return
+
+        # Defer para evitar timeout de interação
+        await interaction.response.defer(ephemeral=True)
+        modal = TriagemModal()
+        await interaction.followup.send("Abrindo formulário de triagem...", ephemeral=True)
+        await interaction.user.send_modal(modal)  # Abre modal diretamente para o usuário
+
 
         try:
             await member.edit(nick=apelido)
