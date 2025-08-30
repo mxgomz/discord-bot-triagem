@@ -13,22 +13,40 @@ from google.oauth2.service_account import Credentials
 # ---------------------- Google Sheets ----------------------
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
-# Verifica se a variável de ambiente existe
 if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
     raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
 
-# Pega o JSON diretamente da variável de ambiente
 sa_info = json.loads(os.environ['GOOGLE_SA_JSON'])
 creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
 
-# Conecta ao Google Sheets
 gclient = gspread.authorize(creds)
 SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
 sheet = gclient.open_by_key(SHEET_ID).sheet1
 
-def registrar_planilha(gerente, acao, item, quantidade):
+def registrar_planilha(gerente, acao, item, quantidade, comentario=""):
     data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    sheet.append_row([data, gerente, acao, item, quantidade])
+    
+    # Totais atuais do estoque
+    estoque = obter_estoque()
+    total_5mm = estoque.get("5mm", 0)
+    total_9mm = estoque.get("9mm", 0)
+    total_762mm = estoque.get("762mm", 0)
+    total_12cbc = estoque.get("12cbc", 0)
+
+    # Adiciona a linha na planilha
+    sheet.append_row([
+        data,
+        gerente,
+        acao,
+        item,
+        quantidade,
+        comentario,
+        "",  # coluna em branco
+        total_5mm,
+        total_9mm,
+        total_762mm,
+        total_12cbc
+    ])
 
 # ---------------------- Discord Bot ----------------------
 intents = discord.Intents.default()
@@ -259,7 +277,13 @@ class EstoqueModal(Modal):
             definir_estoque(self.tipo, quantidade)
             sinal = "✏️"
 
-        registrar_planilha(interaction.user.display_name, self.acao, self.tipo.upper(), abs(quantidade))
+        registrar_planilha(
+            interaction.user.display_name,
+            self.acao,
+            self.tipo.upper(),
+            abs(quantidade),
+            self.obs.value or "Sem observações."
+        )
 
         await atualizar_mensagem_estoque()
 
