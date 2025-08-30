@@ -7,6 +7,22 @@ import datetime
 import asyncio
 import sqlite3
 
+# ---------------------- Google Sheets ----------------------
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_file("estoqueturquesa-1b7b56555798.json", scopes=SCOPES)
+gclient = gspread.authorize(creds)
+SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
+sheet = gclient.open_by_key(SHEET_ID).sheet1
+
+def registrar_planilha(gerente, acao, item, quantidade):
+    data = datetime.now().strftime("%d/%m/%Y %H:%M")
+    sheet.append_row([data, gerente, acao, item, quantidade])
+
+# ---------------------- Discord Bot ----------------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -14,7 +30,7 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# IDs fixos
+# ---------------------- IDs fixos ----------------------
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
@@ -22,13 +38,13 @@ ID_CANAL_TICKET = 1361677898980790314
 ID_CANAL_FAMILIA = 1361045908577456138
 ID_CANAL_ESTOQUE = 1397730060030443662
 ID_CANAL_LOG_MUNICAO = 1397730241190953091
-# --- Novo: canal do painel de hierarquia ---
 ID_CANAL_HIERARQUIA = 1408883105225511092
-ID_CARGO_HIERARQUIA = 1361719183787954236  # cargo permitido para usar o comando
+ID_CARGO_HIERARQUIA = 1361719183787954236
 
-MENSAGEM_PAINEL_ID = None  # Para armazenar a mensagem do painel
+MENSAGEM_PAINEL_ID = None
+mensagem_estoque_id = None
 
-# ---------------------- Função de Hierarquia ----------------------
+# ---------------------- Funções de Hierarquia ----------------------
 CARGOS_CONFIG = [
     {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
     {"nome": "👥 Vice-Líder", "limite": 0, "role": "Vice-Líder"},
@@ -39,7 +55,7 @@ CARGOS_CONFIG = [
     {"nome": "🎯 Gerente de Ação", "limite": 0, "role": "Gerente de Ação"},
     {"nome": "💻 Gerente Discord", "limite": 0, "role": "Gerente Discord"},
     {"nome": "🧑‍💼 Gerente", "limite": 0, "role": "Gerente"},
-    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}  # todos que não tiverem cargos acima
+    {"nome": "🚩 Membros", "limite": 0, "role": "Membros"}
 ]
 
 def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
@@ -53,18 +69,15 @@ def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
 async def atualizar_mensagem_painel():
     global MENSAGEM_PAINEL_ID
     canal = bot.get_channel(ID_CANAL_HIERARQUIA)
-    if canal is None:
+    if not canal:
         return
-
     guild = canal.guild
     embed = discord.Embed(title="📌 Painel de Hierarquia", color=discord.Color.blue())
-
     membros_ocupados = set()
 
     for config in CARGOS_CONFIG:
         role = discord.utils.get(guild.roles, name=config["role"])
         membros = []
-
         if config["role"] == "Membros":
             membros = [m.mention for m in guild.members if not m.bot and m not in membros_ocupados]
         elif role:
@@ -72,20 +85,16 @@ async def atualizar_mensagem_painel():
             for m in guild.members:
                 if role in m.roles:
                     membros_ocupados.add(m)
-
         ocupados = len(membros)
         limite = config["limite"]
-
         lista_membros = "\n".join(f"➔ {m}" for m in membros) if membros else "🔴 Nenhum"
         barra = gerar_barra(ocupados, limite)
-
         embed.add_field(
             name=f"{config['nome']} - ({ocupados}/{limite})" if limite > 0 else f"{config['nome']} - ({ocupados})",
             value=f"{lista_membros}\n\n{barra}",
             inline=False
         )
 
-    # Se já tem ID válido, tenta editar
     if MENSAGEM_PAINEL_ID:
         try:
             msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
@@ -94,18 +103,15 @@ async def atualizar_mensagem_painel():
         except:
             MENSAGEM_PAINEL_ID = None
 
-    # Se não tem ID válido, procura no histórico
     async for m in canal.history(limit=10):
         if m.author == bot.user and m.embeds and m.embeds[0].title == "📌 Painel de Hierarquia":
             await m.edit(embed=embed)
             MENSAGEM_PAINEL_ID = m.id
             return
 
-    # Se não encontrou nada, manda uma nova
     msg = await canal.send(embed=embed)
     MENSAGEM_PAINEL_ID = msg.id
 
-# ---------------------- Comando !atualizarlista ----------------------
 @bot.command()
 async def atualizarlista(ctx):
     author = ctx.author
@@ -113,25 +119,10 @@ async def atualizarlista(ctx):
     if cargo_autorizado not in author.roles:
         await ctx.send("❌ Você não tem permissão para usar este comando.", delete_after=5)
         return
-
     await atualizar_mensagem_painel()
     await ctx.send("✅ Painel de hierarquia atualizado!", delete_after=5)
 
-# ---------------------- Comando Triagem -----------------------------
-@bot.command()
-@commands.has_role(ID_CARGO_HIERARQUIA)  # só quem tem cargo hierarquia pode usar
-async def enviartriagem(ctx):
-    canal = bot.get_channel(ID_CANAL_TRIAGEM)
-    if not canal:
-        await ctx.send("Canal de triagem não encontrado.", delete_after=5)
-        return
-
-    mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
-    view = TriagemView()
-    await canal.send(mensagem_fixa, view=view)
-    await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
-
-# ---------------------- Triagem Modal e View ----------------------
+# ---------------------- Triagem ----------------------
 class TriagemModal(Modal):
     def __init__(self):
         super().__init__(title="Triagem")
@@ -173,7 +164,6 @@ class TriagemModal(Modal):
         except Exception as e:
             await interaction.response.send_message(f"Erro ao processar a triagem: {e}", ephemeral=True)
 
-
 class TriagemView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -182,6 +172,18 @@ class TriagemView(View):
     async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = TriagemModal()
         await interaction.response.send_modal(modal)
+
+@bot.command()
+@commands.has_role(ID_CARGO_HIERARQUIA)
+async def enviartriagem(ctx):
+    canal = bot.get_channel(ID_CANAL_TRIAGEM)
+    if not canal:
+        await ctx.send("Canal de triagem não encontrado.", delete_after=5)
+        return
+    mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
+    view = TriagemView()
+    await canal.send(mensagem_fixa, view=view)
+    await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
 
 # ---------------------- Banco de Dados Estoque ----------------------
 def iniciar_db():
@@ -219,27 +221,7 @@ def obter_estoque():
     con.close()
     return dados
 
-mensagem_estoque_id = None
-
-async def atualizar_mensagem_estoque():
-    global mensagem_estoque_id
-    canal = bot.get_channel(ID_CANAL_ESTOQUE)
-    estoque = obter_estoque()
-    conteudo = "📦 **ESTOQUE ATUAL - Facção Turquesa**\n\n"
-    for tipo, qtd in estoque.items():
-        conteudo += f"🔫 {tipo.upper()}: {qtd}\n"
-    view = EstoqueView()
-    try:
-        if mensagem_estoque_id:
-            msg = await canal.fetch_message(mensagem_estoque_id)
-            await msg.edit(content=conteudo, view=view)
-        else:
-            msg = await canal.send(content=conteudo, view=view)
-            mensagem_estoque_id = msg.id
-    except Exception as e:
-        print(f"Erro ao atualizar mensagem de estoque: {e}")
-
-# ----------- Modal Estoque -----------
+# ---------------------- Estoque Modal ----------------------
 class EstoqueModal(Modal):
     def __init__(self, acao, tipo):
         super().__init__(title=f"{acao} Munição - {tipo.upper()}")
@@ -269,6 +251,9 @@ class EstoqueModal(Modal):
             definir_estoque(self.tipo, quantidade)
             sinal = "✏️"
 
+        # 🔹 Registro no Google Sheets
+        registrar_planilha(interaction.user.display_name, self.acao, self.tipo.upper(), abs(quantidade))
+
         await atualizar_mensagem_estoque()
 
         canal_log = bot.get_channel(ID_CANAL_LOG_MUNICAO)
@@ -280,7 +265,7 @@ class EstoqueModal(Modal):
 
         await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
-# ----------- Estoque Views Corrigida -----------
+# ---------------------- Estoque Views ----------------------
 class TipoSelect(Select):
     def __init__(self, acao):
         options = [
@@ -295,12 +280,10 @@ class TipoSelect(Select):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(EstoqueModal(self.acao, self.values[0]))
 
-
 class TipoSelectView(View):
     def __init__(self, acao):
         super().__init__(timeout=None)
         self.add_item(TipoSelect(acao))
-
 
 class EstoqueView(View):
     def __init__(self):
@@ -321,11 +304,33 @@ class EstoqueView(View):
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# ----------- Eventos -----------
+# ---------------------- Atualizar Mensagem Estoque ----------------------
+async def atualizar_mensagem_estoque():
+    global mensagem_estoque_id
+    canal = bot.get_channel(ID_CANAL_ESTOQUE)
+    if not canal:
+        return
+    estoque = obter_estoque()
+    conteudo = "📦 **ESTOQUE ATUAL - Facção Turquesa**\n\n"
+    for tipo, qtd in estoque.items():
+        conteudo += f"🔫 {tipo.upper()}: {qtd}\n"
+    view = EstoqueView()
+    try:
+        if mensagem_estoque_id:
+            msg = await canal.fetch_message(mensagem_estoque_id)
+            await msg.edit(content=conteudo, view=view)
+        else:
+            msg = await canal.send(content=conteudo, view=view)
+            mensagem_estoque_id = msg.id
+    except Exception as e:
+        print(f"Erro ao atualizar mensagem de estoque: {e}")
+
+# ---------------------- Eventos ----------------------
 @bot.event
 async def on_ready():
     iniciar_db()
     await atualizar_mensagem_estoque()
+    await atualizar_mensagem_painel()
     print(f"✅ Bot online como {bot.user}")
 
     canal = bot.get_channel(ID_CANAL_TRIAGEM)
@@ -357,24 +362,18 @@ async def on_message(message):
     # Resposta por palavra-chave
     if message.channel.id == 1366016740605165670:
         conteudo = message.content.lower()
-
         if conteudo.startswith("toze preços"):
             await message.channel.send("Use: Toze [Munição / Drogas / Attachs / Armas / Flippers]")
-
         elif conteudo.startswith("toze munição"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/TaoEOn7.png"))
-
         elif conteudo.startswith("toze drogas"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/dciMFnD.png"))
-
         elif conteudo.startswith("toze attachs"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/S1aS1o9.png"))
-
         elif conteudo.startswith("toze armas"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/NvrzKdQ.png"))
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/cr5Xere.png"))
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/ylAyVfq.png"))
-
         elif conteudo.startswith("toze flippers"):
             await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/h6MJfHF.png"))
 
@@ -387,10 +386,11 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ----------- Comando Painel Estoque -----------
+# ---------------------- Comando Painel Estoque ----------------------
 @bot.command()
 async def painelmunicao(ctx):
     await atualizar_mensagem_estoque()
     await ctx.send("Painel de munições iniciado no canal correto.")
 
+# ---------------------- Rodar Bot ----------------------
 bot.run(os.getenv("DISCORD_TOKEN"))
