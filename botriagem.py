@@ -5,12 +5,10 @@ from discord import SelectOption
 import os
 import json
 import datetime
-import asyncio
 import sqlite3
 import gspread
 from google.oauth2.service_account import Credentials
 
-# ---------------------- Google Sheets ----------------------
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
@@ -23,32 +21,41 @@ gclient = gspread.authorize(creds)
 SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
 sheet = gclient.open_by_key(SHEET_ID).sheet1
 
+def obter_estoque():
+    con = sqlite3.connect("estoque.db")
+    cur = con.cursor()
+    cur.execute("SELECT tipo, quantidade FROM estoque")
+    dados = {tipo: qtd for tipo, qtd in cur.fetchall()}
+    con.close()
+    return dados
+
 def registrar_planilha(gerente, acao, item, quantidade, comentario=""):
     data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    
-    # Totais atuais do estoque
+    linhas = sheet.get_all_values()
     estoque = obter_estoque()
     total_5mm = estoque.get("5mm", 0)
     total_9mm = estoque.get("9mm", 0)
     total_762mm = estoque.get("762mm", 0)
     total_12cbc = estoque.get("12cbc", 0)
-
-    # Adiciona a linha na planilha
-    sheet.append_row([
+    nova_linha = [
         data,
         gerente,
         acao,
         item,
         quantidade,
         comentario,
-        "",  # coluna em branco
+        "",
         total_5mm,
         total_9mm,
         total_762mm,
         total_12cbc
-    ])
+    ]
+    if len(linhas) <= 1:
+        sheet.append_row(nova_linha)
+    else:
+        sheet.insert_row(nova_linha, index=2)
+        sheet.update(f"H3:K{len(linhas)+1}", [[""]*4]*(len(linhas)-1))
 
-# ---------------------- Discord Bot ----------------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -56,7 +63,6 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ---------------------- IDs fixos ----------------------
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
@@ -70,7 +76,6 @@ ID_CARGO_HIERARQUIA = 1361719183787954236
 MENSAGEM_PAINEL_ID = None
 mensagem_estoque_id = None
 
-# ---------------------- Funções de Hierarquia ----------------------
 CARGOS_CONFIG = [
     {"nome": "👑 Líder", "limite": 1, "role": "Líder"},
     {"nome": "👥 Vice-Líder", "limite": 0, "role": "Vice-Líder"},
@@ -94,13 +99,12 @@ def gerar_barra(ocupados: int, limite: int, tamanho: int = 20) -> str:
 
 async def atualizar_mensagem_painel():
     global MENSAGEM_PAINEL_ID
-    canal = bot.get_channel(ID_CANAL_HIERARQUIA)
+    canal = bot.get_channel(ID_CARGO_HIERARQUIA)
     if not canal:
         return
     guild = canal.guild
     embed = discord.Embed(title="📌 Painel de Hierarquia", color=discord.Color.blue())
     membros_ocupados = set()
-
     for config in CARGOS_CONFIG:
         role = discord.utils.get(guild.roles, name=config["role"])
         membros = []
@@ -120,7 +124,6 @@ async def atualizar_mensagem_painel():
             value=f"{lista_membros}\n\n{barra}",
             inline=False
         )
-
     if MENSAGEM_PAINEL_ID:
         try:
             msg = await canal.fetch_message(MENSAGEM_PAINEL_ID)
@@ -128,13 +131,11 @@ async def atualizar_mensagem_painel():
             return
         except:
             MENSAGEM_PAINEL_ID = None
-
     async for m in canal.history(limit=10):
         if m.author == bot.user and m.embeds and m.embeds[0].title == "📌 Painel de Hierarquia":
             await m.edit(embed=embed)
             MENSAGEM_PAINEL_ID = m.id
             return
-
     msg = await canal.send(embed=embed)
     MENSAGEM_PAINEL_ID = msg.id
 
@@ -148,7 +149,6 @@ async def atualizarlista(ctx):
     await atualizar_mensagem_painel()
     await ctx.send("✅ Painel de hierarquia atualizado!", delete_after=5)
 
-# ---------------------- Triagem ----------------------
 class TriagemModal(Modal):
     def __init__(self):
         super().__init__(title="Triagem")
@@ -162,29 +162,23 @@ class TriagemModal(Modal):
         member = interaction.user
         guild = interaction.guild
         cargo_membro = guild.get_role(ID_CARGO_MEMBRO)
-
         if cargo_membro in member.roles:
             await interaction.response.send_message("Você já é cadastrado como membro.", ephemeral=True)
             return
-
         try:
             await member.edit(nick=apelido)
             await member.add_roles(cargo_membro)
-
             url = f"https://discord.com/channels/{guild.id}/{ID_CANAL_TICKET}"
             view = View()
             view.add_item(Button(label="🎫 Abrir Ticket", style=discord.ButtonStyle.blurple, url=url))
-
             await interaction.response.send_message(
                 f"Cadastro realizado com sucesso!\nApelido definido como `{apelido}` ✅\n\nClique abaixo para abrir um **ticket** e continuar o processo.",
                 ephemeral=True,
                 view=view
             )
-
             canal_logs = guild.get_channel(ID_CANAL_LOGS)
             if canal_logs:
                 await canal_logs.send(f"✅ `{apelido}` acabou de passar pela triagem.")
-
         except discord.Forbidden:
             await interaction.response.send_message("Não tenho permissão para alterar apelido ou cargo.", ephemeral=True)
         except Exception as e:
@@ -193,7 +187,6 @@ class TriagemModal(Modal):
 class TriagemView(View):
     def __init__(self):
         super().__init__(timeout=None)
-
     @discord.ui.button(label="Iniciar Triagem", style=discord.ButtonStyle.green)
     async def triagem_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = TriagemModal()
@@ -211,7 +204,6 @@ async def enviartriagem(ctx):
     await canal.send(mensagem_fixa, view=view)
     await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
 
-# ---------------------- Banco de Dados Estoque ----------------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -239,15 +231,6 @@ def definir_estoque(tipo, novo_valor):
     con.commit()
     con.close()
 
-def obter_estoque():
-    con = sqlite3.connect("estoque.db")
-    cur = con.cursor()
-    cur.execute("SELECT tipo, quantidade FROM estoque")
-    dados = {tipo: qtd for tipo, qtd in cur.fetchall()}
-    con.close()
-    return dados
-
-# ---------------------- Estoque Modal ----------------------
 class EstoqueModal(Modal):
     def __init__(self, acao, tipo):
         super().__init__(title=f"{acao} Munição - {tipo.upper()}")
@@ -262,10 +245,8 @@ class EstoqueModal(Modal):
         if not self.qtd.value.isdigit():
             await interaction.response.send_message("Quantidade inválida.", ephemeral=True)
             return
-
         quantidade = int(self.qtd.value)
         estoque_atual = obter_estoque().get(self.tipo, 0)
-
         if self.acao == "Retirar":
             quantidade = -quantidade
             atualizar_estoque(self.tipo, quantidade)
@@ -276,7 +257,6 @@ class EstoqueModal(Modal):
         elif self.acao == "Editar":
             definir_estoque(self.tipo, quantidade)
             sinal = "✏️"
-
         registrar_planilha(
             interaction.user.display_name,
             self.acao,
@@ -284,9 +264,7 @@ class EstoqueModal(Modal):
             abs(quantidade),
             self.obs.value or "Sem observações."
         )
-
         await atualizar_mensagem_estoque()
-
         canal_log = bot.get_channel(ID_CANAL_LOG_MUNICAO)
         if canal_log:
             if self.acao == "Editar":
@@ -296,7 +274,6 @@ class EstoqueModal(Modal):
 
         await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
-# ---------------------- Estoque Views ----------------------
 class TipoSelect(Select):
     def __init__(self, acao):
         options = [
@@ -319,23 +296,19 @@ class TipoSelectView(View):
 class EstoqueView(View):
     def __init__(self):
         super().__init__(timeout=None)
-
     @discord.ui.button(label="➕ Adicionar Munição", style=discord.ButtonStyle.green)
     async def adicionar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send("Selecione o tipo de munição para adicionar:", view=TipoSelectView("Adicionar"), ephemeral=True)
-
     @discord.ui.button(label="➖ Retirar Munição", style=discord.ButtonStyle.red)
     async def retirar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send("Selecione o tipo de munição para retirar:", view=TipoSelectView("Retirar"), ephemeral=True)
-
     @discord.ui.button(label="✏️ Editar Munição", style=discord.ButtonStyle.blurple)
     async def editar(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         await interaction.followup.send("Selecione o tipo de munição para editar:", view=TipoSelectView("Editar"), ephemeral=True)
 
-# ---------------------- Atualizar Mensagem Estoque ----------------------
 async def atualizar_mensagem_estoque():
     global mensagem_estoque_id
     canal = bot.get_channel(ID_CANAL_ESTOQUE)
@@ -356,27 +329,23 @@ async def atualizar_mensagem_estoque():
     except Exception as e:
         print(f"Erro ao atualizar mensagem de estoque: {e}")
 
-# ---------------------- Eventos ----------------------
 @bot.event
 async def on_ready():
     iniciar_db()
     await atualizar_mensagem_estoque()
     await atualizar_mensagem_painel()
     print(f"✅ Bot online como {bot.user}")
-
     canal = bot.get_channel(ID_CANAL_TRIAGEM)
     if canal:
         mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
 
-# ---------------------- Comando Painel Estoque ----------------------
 @bot.command()
 async def painelmunicao(ctx):
     await atualizar_mensagem_estoque()
     await ctx.send("Painel de munições iniciado no canal correto.")
 
-# ---------------------- Rodar Bot ----------------------
 if not os.getenv("DISCORD_TOKEN"):
     raise ValueError("A variável de ambiente DISCORD_TOKEN não está configurada!")
 
