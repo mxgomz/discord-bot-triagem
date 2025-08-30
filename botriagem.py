@@ -3,21 +3,23 @@ from discord.ext import commands
 from discord.ui import Button, View, Modal, TextInput, Select
 from discord import SelectOption
 import os
+import json
 import datetime
 import asyncio
 import sqlite3
 
-# ---------------------- Google Sheets ----------------------
-import gspread
-from google.oauth2.service_account import Credentials
-from datetime import datetime
-
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-creds = Credentials.from_service_account_file("estoqueturquesa-1b7b56555798.json", scopes=SCOPES)
+
+# Pega o JSON da variável de ambiente
+sa_info = json.loads(os.environ['GOOGLE_SA_JSON'])
+creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
+
+# Conecta ao Google Sheets
 gclient = gspread.authorize(creds)
 SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
 sheet = gclient.open_by_key(SHEET_ID).sheet1
 
+# Função para registrar no Google Sheets
 def registrar_planilha(gerente, acao, item, quantidade):
     data = datetime.now().strftime("%d/%m/%Y %H:%M")
     sheet.append_row([data, gerente, acao, item, quantidade])
