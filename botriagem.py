@@ -7,10 +7,17 @@ import json
 import datetime
 import asyncio
 import sqlite3
+import gspread
+from google.oauth2.service_account import Credentials
 
+# ---------------------- Google Sheets ----------------------
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
-# Pega o JSON da variável de ambiente
+# Verifica se a variável de ambiente existe
+if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
+    raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
+
+# Pega o JSON diretamente da variável de ambiente
 sa_info = json.loads(os.environ['GOOGLE_SA_JSON'])
 creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
 
@@ -19,9 +26,8 @@ gclient = gspread.authorize(creds)
 SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
 sheet = gclient.open_by_key(SHEET_ID).sheet1
 
-# Função para registrar no Google Sheets
 def registrar_planilha(gerente, acao, item, quantidade):
-    data = datetime.now().strftime("%d/%m/%Y %H:%M")
+    data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
     sheet.append_row([data, gerente, acao, item, quantidade])
 
 # ---------------------- Discord Bot ----------------------
@@ -253,7 +259,6 @@ class EstoqueModal(Modal):
             definir_estoque(self.tipo, quantidade)
             sinal = "✏️"
 
-        # 🔹 Registro no Google Sheets
         registrar_planilha(interaction.user.display_name, self.acao, self.tipo.upper(), abs(quantidade))
 
         await atualizar_mensagem_estoque()
@@ -341,53 +346,6 @@ async def on_ready():
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
 
-@bot.event
-async def on_guild_channel_create(channel):
-    if isinstance(channel, discord.TextChannel) and channel.name.startswith("ticket-"):
-        await asyncio.sleep(2)
-        try:
-            messages = [msg async for msg in channel.history(limit=5)]
-            for msg in messages:
-                apelido = msg.author.nick or msg.author.name
-                if apelido:
-                    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
-                    await channel.send(f"📬 Ticket de **{apelido}** aberto em {agora}.")
-                    break
-        except Exception as e:
-            print(f"Erro ao enviar mensagem de abertura de ticket: {e}")
-
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    # Resposta por palavra-chave
-    if message.channel.id == 1366016740605165670:
-        conteudo = message.content.lower()
-        if conteudo.startswith("toze preços"):
-            await message.channel.send("Use: Toze [Munição / Drogas / Attachs / Armas / Flippers]")
-        elif conteudo.startswith("toze munição"):
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/TaoEOn7.png"))
-        elif conteudo.startswith("toze drogas"):
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/dciMFnD.png"))
-        elif conteudo.startswith("toze attachs"):
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/S1aS1o9.png"))
-        elif conteudo.startswith("toze armas"):
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/NvrzKdQ.png"))
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/cr5Xere.png"))
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/ylAyVfq.png"))
-        elif conteudo.startswith("toze flippers"):
-            await message.channel.send(embed=discord.Embed().set_image(url="https://i.imgur.com/h6MJfHF.png"))
-
-    # Canal família
-    elif message.channel.id == ID_CANAL_FAMILIA:
-        conteudo = message.content.lower()
-        palavras_chave = ["ajuda", "busca", "loc", "salva", "morto", "to na", "to em", "help", "ajudar", "onde"]
-        if any(palavra in conteudo for palavra in palavras_chave):
-            await message.channel.send("⚠️ **Aviso:** O uso de metagaming no chat da família é proibido. Persistindo, poderão ocorrer punições.")
-
-    await bot.process_commands(message)
-
 # ---------------------- Comando Painel Estoque ----------------------
 @bot.command()
 async def painelmunicao(ctx):
@@ -395,4 +353,7 @@ async def painelmunicao(ctx):
     await ctx.send("Painel de munições iniciado no canal correto.")
 
 # ---------------------- Rodar Bot ----------------------
+if not os.getenv("DISCORD_TOKEN"):
+    raise ValueError("A variável de ambiente DISCORD_TOKEN não está configurada!")
+
 bot.run(os.getenv("DISCORD_TOKEN"))
