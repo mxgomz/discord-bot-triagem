@@ -104,12 +104,40 @@ ID_CANAL_TICKET = 1361677898980790314
 ID_CANAL_HIERARQUIA = 1408883105225511092
 ID_CARGO_HIERARQUIA = 1361719183787954236
 
+# ----------------- MODAL DO COFRE -----------------
+class FinanceModal(Modal):
+    def __init__(self):
+        super().__init__(title="Registrar no Cofre")
+        self.tipo_input = TextInput(label="Tipo", placeholder="Entrada ou Saída")
+        self.valor_input = TextInput(label="Valor", placeholder="Ex: 500")
+        self.descricao_input = TextInput(label="Descrição")
+        self.add_item(self.tipo_input)
+        self.add_item(self.valor_input)
+        self.add_item(self.descricao_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        tipo = self.tipo_input.value
+        valor = self.valor_input.value
+        descricao = self.descricao_input.value
+        try:
+            registrar_financeiro(interaction.user.display_name, tipo, descricao, valor)
+            await interaction.response.send_message("✅ Registro salvo com sucesso!", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Erro ao registrar: {e}", ephemeral=True)
+
 # ----------------- VIEW DO BOTÃO -----------------
 class FinanceView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        # Adiciona apenas um botão
         self.add_item(Button(label="Registrar no Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance"))
+
+# ----------------- CALLBACK DO BOTÃO -----------------
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if interaction.type == discord.InteractionType.component:
+        if interaction.data.get("custom_id") == "btn_finance":
+            modal = FinanceModal()
+            await interaction.response.send_modal(modal)
 
 # restante
 MENSAGEM_PAINEL_ID = None
@@ -177,18 +205,6 @@ async def atualizar_mensagem_painel():
             return
     msg = await canal.send(embed=embed)
     MENSAGEM_PAINEL_ID = msg.id
-
-# ----------------- COMANDO PARA ENVIAR O PAINEL -----------------
-@bot.command()
-async def painelcofre(ctx):
-    canal = bot.get_channel(ID_CANAL_FINANCEIRO)
-    if not canal:
-        await ctx.send("Canal financeiro não encontrado.", delete_after=5)
-        return
-    view = FinanceView()
-    await canal.send("💰 Clique no botão abaixo para registrar uma entrada ou saída no cofre.", view=view)
-    await ctx.send("✅ Painel financeiro iniciado.", delete_after=5)
-
 
 @bot.command()
 async def atualizarlista(ctx):
@@ -380,14 +396,6 @@ async def atualizar_mensagem_estoque():
             mensagem_estoque_id = msg.id
     except Exception as e:
         print(f"Erro ao atualizar mensagem de estoque: {e}")
-
-# ----------------- CALLBACK DO BOTÃO -----------------
-@bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type == discord.InteractionType.component:
-        if interaction.data["custom_id"] == "btn_finance":
-            modal = FinanceModal()  # sua modal existente
-            await interaction.response.send_modal(modal)
 
 @bot.event
 async def on_ready():
