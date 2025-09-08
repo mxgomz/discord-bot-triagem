@@ -9,47 +9,18 @@ import sqlite3
 import gspread
 from google.oauth2.service_account import Credentials
 
-# ----------------- VARIÁVEIS DE AMBIENTE -----------------
-if 'GOOGLE_SA_JSON_FINANCEIRO' not in os.environ or not os.environ['GOOGLE_SA_JSON_FINANCEIRO']:
-    raise ValueError("A variável de ambiente GOOGLE_SA_JSON_FINANCEIRO não está configurada!")
-if 'GOOGLE_SA_JSON_ESTOQUE' not in os.environ or not os.environ['GOOGLE_SA_JSON_ESTOQUE']:
-    raise ValueError("A variável de ambiente GOOGLE_SA_JSON_ESTOQUE não está configurada!")
-if 'DISCORD_TOKEN' not in os.environ or not os.environ['DISCORD_TOKEN']:
-    raise ValueError("A variável de ambiente DISCORD_TOKEN não está configurada!")
-
-# ----------------- CONFIGURAÇÃO GOOGLE SHEETS -----------------
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
-# Financeiro
-sa_info_financeiro = json.loads(os.environ['GOOGLE_SA_JSON_FINANCEIRO'])
-creds_financeiro = Credentials.from_service_account_info(sa_info_financeiro, scopes=SCOPES)
-gclient_financeiro = gspread.authorize(creds_financeiro)
-SHEET_ID_FINANCEIRO = "1-2u7x0LIxxLS8uV1Oyj-aeL27OuKfAcggHspqU8tpf0"
-sheet_financeiro = gclient_financeiro.open_by_key(SHEET_ID_FINANCEIRO).sheet1
+if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
+    raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
 
-# Estoque
-sa_info_estoque = json.loads(os.environ['GOOGLE_SA_JSON_ESTOQUE'])
-creds_estoque = Credentials.from_service_account_info(sa_info_estoque, scopes=SCOPES)
-gclient_estoque = gspread.authorize(creds_estoque)
-SHEET_ID_ESTOQUE = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
-sheet_estoque = gclient_estoque.open_by_key(SHEET_ID_ESTOQUE).sheet1
+sa_info = json.loads(os.environ['GOOGLE_SA_JSON'])
+creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
 
-# ----------------- FUNÇÕES PLANILHA FINANCEIRO -----------------
-def registrar_financeiro(gerente, tipo, descricao, valor):
-    valor = float(valor)
-    data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    linhas = sheet_financeiro.get_all_values()
-    
-    saldo_atual = float(linhas[1][4]) if len(linhas) > 1 and linhas[1][4] else 0.0
-    saldo_total = saldo_atual + valor if tipo.lower() == "entrada" else saldo_atual - valor
-    
-    nova_linha = [data, gerente, tipo, descricao, str(valor), str(saldo_total)]
-    if len(linhas) <= 1:
-        sheet_financeiro.append_row(nova_linha)
-    else:
-        sheet_financeiro.insert_row(nova_linha, index=2)
+gclient = gspread.authorize(creds)
+SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
+sheet = gclient.open_by_key(SHEET_ID).sheet1
 
-# ----------------- FUNÇÕES PLANILHA ESTOQUE -----------------
 def obter_estoque():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -60,7 +31,7 @@ def obter_estoque():
 
 def registrar_planilha(gerente, acao, item, quantidade, comentario=""):
     data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    linhas = sheet_estoque.get_all_values()
+    linhas = sheet.get_all_values()
     estoque = obter_estoque()
     total_5mm = estoque.get("5mm", 0)
     total_9mm = estoque.get("9mm", 0)
@@ -80,109 +51,28 @@ def registrar_planilha(gerente, acao, item, quantidade, comentario=""):
         total_12cbc
     ]
     if len(linhas) <= 1:
-        sheet_estoque.append_row(nova_linha)
+        sheet.append_row(nova_linha)
     else:
-        sheet_estoque.insert_row(nova_linha, index=2)
-        sheet_estoque.update(f"H3:K{len(linhas)+1}", [[""]*4]*(len(linhas)-1))
+        sheet.insert_row(nova_linha, index=2)
+        sheet.update(f"H3:K{len(linhas)+1}", [[""]*4]*(len(linhas)-1))
 
-# ----------------- CONFIGURAÇÃO BOT -----------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ----------------- IDS -----------------
-ID_CANAL_FINANCEIRO = 1409591228265398393
-ID_CANAL_LOG_FINANCEIRO = 1414685341797056623
-ID_CANAL_ESTOQUE = 1397730060030443662
-ID_CANAL_LOG_MUNICAO = 1397730241190953091
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
 ID_CANAL_TICKET = 1361677898980790314
+ID_CANAL_FAMILIA = 1361045908577456138
+ID_CANAL_ESTOQUE = 1397730060030443662
+ID_CANAL_LOG_MUNICAO = 1397730241190953091
 ID_CANAL_HIERARQUIA = 1408883105225511092
 ID_CARGO_HIERARQUIA = 1361719183787954236
 
-# ----------------- VIEW DO MENU TIPO -----------------
-class TipoSelect(Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label="Entrada", value="Entrada"),
-            discord.SelectOption(label="Saída", value="Saída")
-        ]
-        super().__init__(placeholder="Selecione o tipo", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        tipo = self.values[0]  # Entrada ou Saída
-        modal = FinanceModal(tipo)  # passa o tipo para a modal
-        await interaction.response.send_modal(modal)
-
-class TipoSelectView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(TipoSelect())
-
-# ----------------- MODAL DE REGISTRO -----------------
-class FinanceModal(Modal):
-    def __init__(self, tipo):
-        super().__init__(title=f"Registrar {tipo} no Cofre")
-        self.tipo = tipo
-        self.descricao_input = TextInput(label="Descrição", placeholder="Ex.: Venda de munição")
-        self.valor_input = TextInput(label="Valor", placeholder="Ex.: 1500")
-        self.add_item(self.descricao_input)
-        self.add_item(self.valor_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            valor = float(self.valor_input.value)
-        except ValueError:
-            await interaction.response.send_message("Valor inválido.", ephemeral=True)
-            return
-
-        descricao = self.descricao_input.value
-        registrar_financeiro(interaction.user.display_name, self.tipo, descricao, valor)
-
-        # Envia apenas no canal de log
-        canal_log = bot.get_channel(ID_CANAL_LOG_FINANCEIRO)
-        if canal_log:
-            await canal_log.send(f"💰 {interaction.user.display_name} registrou **{self.tipo}** no cofre.\nDescrição: {descricao}\nValor: {valor}")
-
-        # Apenas confirma a interação sem enviar mensagem visível
-        await interaction.response.defer(ephemeral=True)
-
-# ----------------- VIEW DO COFRE COM BOTÃO -----------------
-class CofreView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="💰 Abrir Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance")
-    async def abrir_cofre(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Abre diretamente o menu suspenso de tipo
-        await interaction.response.send_message("Selecione o tipo de registro:", view=TipoSelectView(), ephemeral=True)
-
-# ----------------- COMANDO PARA ENVIAR O PAINEL -----------------
-@bot.command()
-@commands.has_role(ID_CARGO_HIERARQUIA)
-async def painelcofre(ctx):
-    """Envia o painel do cofre com o botão para registrar Entrada/Saída"""
-    canal = bot.get_channel(ID_CANAL_FINANCEIRO)
-    if not canal:
-        await ctx.send("Canal do cofre não encontrado.", delete_after=5)
-        return
-
-    embed = discord.Embed(
-        title="💰 Painel do Cofre",
-        description="Clique no botão abaixo para registrar Entrada ou Saída no cofre.",
-        color=discord.Color.green()
-    )
-    view = CofreView()
-    await canal.send(embed=embed, view=view)
-    await ctx.send("✅ Painel do cofre enviado.", delete_after=5)
-
-
-
-# restante
 MENSAGEM_PAINEL_ID = None
 mensagem_estoque_id = None
 
@@ -314,7 +204,6 @@ async def enviartriagem(ctx):
     await canal.send(mensagem_fixa, view=view)
     await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
 
-# ----------------- DB ESTOQUE -----------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -383,7 +272,7 @@ class EstoqueModal(Modal):
             else:
                 await canal_log.send(f"{sinal} {interaction.user.display_name} {self.acao.lower()} {abs(quantidade)} de **{self.tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
 
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
 
 class TipoSelect(Select):
     def __init__(self, acao):
