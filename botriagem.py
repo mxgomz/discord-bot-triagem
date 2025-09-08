@@ -9,125 +9,47 @@ import sqlite3
 import gspread
 from google.oauth2.service_account import Credentials
 
+# ----------------- VARIÁVEIS DE AMBIENTE -----------------
+if 'GOOGLE_SA_JSON_FINANCEIRO' not in os.environ or not os.environ['GOOGLE_SA_JSON_FINANCEIRO']:
+    raise ValueError("A variável de ambiente GOOGLE_SA_JSON_FINANCEIRO não está configurada!")
+if 'GOOGLE_SA_JSON_ESTOQUE' not in os.environ or not os.environ['GOOGLE_SA_JSON_ESTOQUE']:
+    raise ValueError("A variável de ambiente GOOGLE_SA_JSON_ESTOQUE não está configurada!")
+if 'DISCORD_TOKEN' not in os.environ or not os.environ['DISCORD_TOKEN']:
+    raise ValueError("A variável de ambiente DISCORD_TOKEN não está configurada!")
 
-# ----------------- GOOGLE SHEETS -----------------
+# ----------------- CONFIGURAÇÃO GOOGLE SHEETS -----------------
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
-    raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
-sa_info = json.loads(os.environ['GOOGLE_SA_JSON_FINANCEIRO'])
-creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-gclient = gspread.authorize(creds)
-SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
-sheet = gclient.open_by_key(SHEET_ID).sheet1
 
-# ----------------- FUNÇÕES PARA PLANILHA -----------------
+# Financeiro
+sa_info_financeiro = json.loads(os.environ['GOOGLE_SA_JSON_FINANCEIRO'])
+creds_financeiro = Credentials.from_service_account_info(sa_info_financeiro, scopes=SCOPES)
+gclient_financeiro = gspread.authorize(creds_financeiro)
+SHEET_ID_FINANCEIRO = "ID_DA_PLANILHA_FINANCEIRO"
+sheet_financeiro = gclient_financeiro.open_by_key(SHEET_ID_FINANCEIRO).sheet1
+
+# Estoque
+sa_info_estoque = json.loads(os.environ['GOOGLE_SA_JSON_ESTOQUE'])
+creds_estoque = Credentials.from_service_account_info(sa_info_estoque, scopes=SCOPES)
+gclient_estoque = gspread.authorize(creds_estoque)
+SHEET_ID_ESTOQUE = "ID_DA_PLANILHA_ESTOQUE"
+sheet_estoque = gclient_estoque.open_by_key(SHEET_ID_ESTOQUE).sheet1
+
+# ----------------- FUNÇÕES PLANILHA FINANCEIRO -----------------
 def registrar_financeiro(gerente, tipo, descricao, valor):
     valor = float(valor)
     data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    linhas = sheet.get_all_values()
+    linhas = sheet_financeiro.get_all_values()
     
-    # Obter saldo atual
     saldo_atual = float(linhas[1][4]) if len(linhas) > 1 and linhas[1][4] else 0.0
-    if tipo.lower() == "entrada":
-        saldo_total = saldo_atual + valor
-    else:
-        saldo_total = saldo_atual - valor
+    saldo_total = saldo_atual + valor if tipo.lower() == "entrada" else saldo_atual - valor
     
-    # Nova linha: sempre na primeira linha (logo abaixo do header)
     nova_linha = [data, gerente, tipo, descricao, str(valor), str(saldo_total)]
     if len(linhas) <= 1:
-        sheet.append_row(nova_linha)
+        sheet_financeiro.append_row(nova_linha)
     else:
-        sheet.insert_row(nova_linha, index=2)
+        sheet_financeiro.insert_row(nova_linha, index=2)
 
-# ----------------- CONFIGURAÇÕES BOT -----------------
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-intents.guilds = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-# ----------------- IDS -----------------
-ID_CANAL_FINANCEIRO = 1409591228265398393
-ID_CANAL_LOG_FINANCEIRO = 1414685341797056623
-
-# ----------------- MODAL -----------------
-class FinanceModal(Modal):
-    def __init__(self):
-        super().__init__(title="Registrar Valor no Cofre")
-        # Tipo: Entrada/Saída
-        self.tipo = Select(
-            placeholder="Selecione o tipo",
-            options=[
-                SelectOption(label="Entrada", value="Entrada"),
-                SelectOption(label="Saída", value="Saída")
-            ]
-        )
-        self.tipo.required = True
-        self.add_item(self.tipo)
-        
-        # Descrição
-        self.descricao = TextInput(label="Descrição", placeholder="Ex: Venda de item", required=True)
-        self.add_item(self.descricao)
-        
-        # Valor
-        self.valor = TextInput(label="Valor (R$)", placeholder="Ex: 1000", required=True)
-        self.add_item(self.valor)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        gerente = interaction.user.display_name
-        tipo = self.tipo.values[0]
-        descricao = self.descricao.value
-        valor = self.valor.value
-        
-        try:
-            # Registrar na planilha
-            registrar_financeiro(gerente, tipo, descricao, valor)
-            
-            # Log
-            canal_log = bot.get_channel(ID_CANAL_LOG_FINANCEIRO)
-            if canal_log:
-                await canal_log.send(f"💰 {gerente} fez um novo registro no cofre.")
-            
-            await interaction.response.send_message("✅ Registro realizado com sucesso!", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Erro ao registrar: {e}", ephemeral=True)
-
-# ----------------- VIEW -----------------
-class FinanceView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(Button(label="Registrar no Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance"))
-
-    @discord.ui.button(label="Registrar no Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance")
-    async def registrar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = FinanceModal()
-        await interaction.response.send_modal(modal)
-
-# ----------------- ENVIAR MENSAGEM COM BOTÃO -----------------
-@bot.command()
-async def painelcofre(ctx):
-    canal = bot.get_channel(ID_CANAL_FINANCEIRO)
-    if not canal:
-        await ctx.send("Canal financeiro não encontrado.", delete_after=5)
-        return
-    view = FinanceView()
-    await canal.send("💰 Clique no botão abaixo para registrar uma entrada ou saída no cofre.", view=view)
-    await ctx.send("✅ Painel financeiro iniciado.", delete_after=5)
-
-
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-
-if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
-    raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
-
-sa_info = json.loads(os.environ['GOOGLE_SA_JSON_ESTOQUE'])
-creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-
-gclient = gspread.authorize(creds)
-SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
-sheet = gclient.open_by_key(SHEET_ID).sheet1
-
+# ----------------- FUNÇÕES PLANILHA ESTOQUE -----------------
 def obter_estoque():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
@@ -138,7 +60,7 @@ def obter_estoque():
 
 def registrar_planilha(gerente, acao, item, quantidade, comentario=""):
     data = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-    linhas = sheet.get_all_values()
+    linhas = sheet_estoque.get_all_values()
     estoque = obter_estoque()
     total_5mm = estoque.get("5mm", 0)
     total_9mm = estoque.get("9mm", 0)
@@ -158,28 +80,31 @@ def registrar_planilha(gerente, acao, item, quantidade, comentario=""):
         total_12cbc
     ]
     if len(linhas) <= 1:
-        sheet.append_row(nova_linha)
+        sheet_estoque.append_row(nova_linha)
     else:
-        sheet.insert_row(nova_linha, index=2)
-        sheet.update(f"H3:K{len(linhas)+1}", [[""]*4]*(len(linhas)-1))
+        sheet_estoque.insert_row(nova_linha, index=2)
+        sheet_estoque.update(f"H3:K{len(linhas)+1}", [[""]*4]*(len(linhas)-1))
 
+# ----------------- CONFIGURAÇÃO BOT -----------------
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ----------------- IDS -----------------
+ID_CANAL_FINANCEIRO = 1409591228265398393
+ID_CANAL_LOG_FINANCEIRO = 1414685341797056623
+ID_CANAL_ESTOQUE = 1397730060030443662
+ID_CANAL_LOG_MUNICAO = 1397730241190953091
 ID_CANAL_TRIAGEM = 1391472328994717846
 ID_CARGO_MEMBRO = 1360956462180077669
 ID_CANAL_LOGS = 1391853666507690034
 ID_CANAL_TICKET = 1361677898980790314
-ID_CANAL_FAMILIA = 1361045908577456138
-ID_CANAL_ESTOQUE = 1397730060030443662
-ID_CANAL_LOG_MUNICAO = 1397730241190953091
 ID_CANAL_HIERARQUIA = 1408883105225511092
 ID_CARGO_HIERARQUIA = 1361719183787954236
 
+# restante
 MENSAGEM_PAINEL_ID = None
 mensagem_estoque_id = None
 
@@ -311,6 +236,7 @@ async def enviartriagem(ctx):
     await canal.send(mensagem_fixa, view=view)
     await ctx.send("✅ Mensagem de triagem enviada.", delete_after=5)
 
+# ----------------- DB ESTOQUE -----------------
 def iniciar_db():
     con = sqlite3.connect("estoque.db")
     cur = con.cursor()
