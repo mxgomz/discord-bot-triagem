@@ -24,7 +24,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 sa_info_financeiro = json.loads(os.environ['GOOGLE_SA_JSON_FINANCEIRO'])
 creds_financeiro = Credentials.from_service_account_info(sa_info_financeiro, scopes=SCOPES)
 gclient_financeiro = gspread.authorize(creds_financeiro)
-SHEET_ID_FINANCEIRO = "ID_DA_PLANILHA_FINANCEIRO"
+SHEET_ID_FINANCEIRO = "1-2u7x0LIxxLS8uV1Oyj-aeL27OuKfAcggHspqU8tpf0"
 sheet_financeiro = gclient_financeiro.open_by_key(SHEET_ID_FINANCEIRO).sheet1
 
 # Estoque
