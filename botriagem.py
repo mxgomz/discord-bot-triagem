@@ -104,40 +104,61 @@ ID_CANAL_TICKET = 1361677898980790314
 ID_CANAL_HIERARQUIA = 1408883105225511092
 ID_CARGO_HIERARQUIA = 1361719183787954236
 
-# ----------------- MODAL DO COFRE -----------------
-class FinanceModal(Modal):
+# ----------------- VIEW DO MENU TIPO -----------------
+class TipoSelect(Select):
     def __init__(self):
-        super().__init__(title="Registrar no Cofre")
-        self.tipo_input = TextInput(label="Tipo", placeholder="Entrada ou Saída")
-        self.valor_input = TextInput(label="Valor", placeholder="Ex: 500")
-        self.descricao_input = TextInput(label="Descrição")
-        self.add_item(self.tipo_input)
-        self.add_item(self.valor_input)
-        self.add_item(self.descricao_input)
+        options = [
+            discord.SelectOption(label="Entrada", value="Entrada"),
+            discord.SelectOption(label="Saída", value="Saída")
+        ]
+        super().__init__(placeholder="Selecione o tipo", options=options)
 
-    async def on_submit(self, interaction: discord.Interaction):
-        tipo = self.tipo_input.value
-        valor = self.valor_input.value
-        descricao = self.descricao_input.value
-        try:
-            registrar_financeiro(interaction.user.display_name, tipo, descricao, valor)
-            await interaction.response.send_message("✅ Registro salvo com sucesso!", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Erro ao registrar: {e}", ephemeral=True)
+    async def callback(self, interaction: discord.Interaction):
+        tipo = self.values[0]  # Entrada ou Saída
+        modal = FinanceModal(tipo)  # passa o tipo para a modal
+        await interaction.response.send_modal(modal)
 
-# ----------------- VIEW DO BOTÃO -----------------
-class FinanceView(View):
+class TipoSelectView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(Button(label="Registrar no Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance"))
+        self.add_item(TipoSelect())
+
+# ----------------- MODAL DE REGISTRO -----------------
+class FinanceModal(Modal):
+    def __init__(self, tipo):
+        super().__init__(title=f"Registrar {tipo} no Cofre")
+        self.tipo = tipo
+        self.descricao_input = TextInput(label="Descrição", placeholder="Ex.: Venda de munição")
+        self.valor_input = TextInput(label="Valor", placeholder="Ex.: 1500")
+        self.add_item(self.descricao_input)
+        self.add_item(self.valor_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            valor = float(self.valor_input.value)
+        except ValueError:
+            await interaction.response.send_message("Valor inválido.", ephemeral=True)
+            return
+
+        descricao = self.descricao_input.value
+        registrar_financeiro(interaction.user.display_name, self.tipo, descricao, valor)
+
+        # Envia apenas no canal de log
+        canal_log = bot.get_channel(ID_CANAL_LOG_FINANCEIRO)
+        if canal_log:
+            await canal_log.send(f"💰 {interaction.user.display_name} registrou **{self.tipo}** no cofre.\nDescrição: {descricao}\nValor: {valor}")
+
+        # Não mostra mensagem para o usuário
+        await interaction.response.defer(ephemeral=True)
 
 # ----------------- CALLBACK DO BOTÃO -----------------
 @bot.event
 async def on_interaction(interaction: discord.Interaction):
     if interaction.type == discord.InteractionType.component:
         if interaction.data.get("custom_id") == "btn_finance":
-            modal = FinanceModal()
-            await interaction.response.send_modal(modal)
+            # Ao clicar, abre o menu suspenso de tipo
+            await interaction.response.send_message("Selecione o tipo de registro:", view=TipoSelectView(), ephemeral=True)
+
 
 # restante
 MENSAGEM_PAINEL_ID = None
@@ -340,7 +361,7 @@ class EstoqueModal(Modal):
             else:
                 await canal_log.send(f"{sinal} {interaction.user.display_name} {self.acao.lower()} {abs(quantidade)} de **{self.tipo.upper()}**\n📝 {self.obs.value or 'Sem observações.'}")
 
-        await interaction.response.send_message("Registro salvo com sucesso!", ephemeral=True)
+        await interaction.response.defer(ephemeral=True)
 
 class TipoSelect(Select):
     def __init__(self, acao):
