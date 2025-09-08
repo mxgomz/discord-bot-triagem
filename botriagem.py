@@ -148,16 +148,38 @@ class FinanceModal(Modal):
         if canal_log:
             await canal_log.send(f"💰 {interaction.user.display_name} registrou **{self.tipo}** no cofre.\nDescrição: {descricao}\nValor: {valor}")
 
-        # Não mostra mensagem para o usuário
+        # Apenas confirma a interação sem enviar mensagem visível
         await interaction.response.defer(ephemeral=True)
 
-# ----------------- CALLBACK DO BOTÃO -----------------
-@bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type == discord.InteractionType.component:
-        if interaction.data.get("custom_id") == "btn_finance":
-            # Ao clicar, abre o menu suspenso de tipo
-            await interaction.response.send_message("Selecione o tipo de registro:", view=TipoSelectView(), ephemeral=True)
+# ----------------- VIEW DO COFRE COM BOTÃO -----------------
+class CofreView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="💰 Abrir Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance")
+    async def abrir_cofre(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Abre diretamente o menu suspenso de tipo
+        await interaction.response.send_message("Selecione o tipo de registro:", view=TipoSelectView(), ephemeral=True)
+
+# ----------------- COMANDO PARA ENVIAR O PAINEL -----------------
+@bot.command()
+@commands.has_role(ID_CARGO_HIERARQUIA)
+async def painelcofre(ctx):
+    """Envia o painel do cofre com o botão para registrar Entrada/Saída"""
+    canal = bot.get_channel(ID_CANAL_FINANCEIRO)
+    if not canal:
+        await ctx.send("Canal do cofre não encontrado.", delete_after=5)
+        return
+
+    embed = discord.Embed(
+        title="💰 Painel do Cofre",
+        description="Clique no botão abaixo para registrar Entrada ou Saída no cofre.",
+        color=discord.Color.green()
+    )
+    view = CofreView()
+    await canal.send(embed=embed, view=view)
+    await ctx.send("✅ Painel do cofre enviado.", delete_after=5)
+
 
 
 # restante
@@ -429,26 +451,6 @@ async def on_ready():
         mensagem_fixa = "Clique no botão abaixo para iniciar a triagem e registrar seu nome e passaporte."
         view = TriagemView()
         await canal.send(mensagem_fixa, view=view)
-
-# ----------------- VIEW COFRE -----------------
-class CofreView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-    @discord.ui.button(label="💰 Abrir Cofre", style=discord.ButtonStyle.green, custom_id="btn_finance")
-    async def abrir_cofre(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Aqui só dispara a interação, a lógica de menu suspenso já está no on_interaction
-        pass
-
-# ----------------- COMANDO PARA ENVIAR O PAINEL DO COFRE -----------------
-@bot.command()
-async def painelcofre(ctx):
-    canal = bot.get_channel(ID_CANAL_FINANCEIRO)
-    if not canal:
-        await ctx.send("Canal do cofre não encontrado.", delete_after=5)
-        return
-    view = CofreView()
-    await canal.send("💰 Clique no botão abaixo para registrar uma entrada ou saída no cofre.", view=view)
-    await ctx.send("✅ Painel do cofre enviado.", delete_after=5)
 
 @bot.command()
 async def painelmunicao(ctx):
