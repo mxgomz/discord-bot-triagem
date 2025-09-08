@@ -14,7 +14,7 @@ from google.oauth2.service_account import Credentials
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
     raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
-sa_info = json.loads(os.environ['GOOGLE_SA_JSON'])
+sa_info = json.loads(os.environ['GOOGLE_SA_JSON_FINANCEIRO'])
 creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
 gclient = gspread.authorize(creds)
 SHEET_ID = "1ZZrnyhpDdjgTP6dYu9MgpKGvq1JHHzyuQ9EyD1P8TfI"
@@ -121,7 +121,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 if 'GOOGLE_SA_JSON' not in os.environ or not os.environ['GOOGLE_SA_JSON']:
     raise ValueError("A variável de ambiente GOOGLE_SA_JSON não está configurada!")
 
-sa_info = json.loads(os.environ['GOOGLE_SA_JSON'])
+sa_info = json.loads(os.environ['GOOGLE_SA_JSON_ESTOQUE'])
 creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
 
 gclient = gspread.authorize(creds)
